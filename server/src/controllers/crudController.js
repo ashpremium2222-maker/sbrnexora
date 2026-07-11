@@ -32,7 +32,7 @@ export function crudController(Model, { populate = "" } = {}) {
           return normalized;
         });
       }
-      const item = await Model.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+      const item = await Model.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: false });
       if (!item) return res.status(404).json({ error: "Not found" });
       res.json(item);
     },
