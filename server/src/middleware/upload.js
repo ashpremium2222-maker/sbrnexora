@@ -1,6 +1,6 @@
 import path from "node:path";
 import multer from "multer";
-import { v2 as cloudinary } from "cloudinary";
+import cloudinary from "cloudinary";
 import cloudinaryStorage from "multer-storage-cloudinary";
 
 cloudinary.config({
