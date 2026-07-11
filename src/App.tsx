@@ -867,10 +867,10 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
         <div className="flex-1 overflow-auto bg-[#0B111C]/5 p-4 flex justify-center">
           <div id="challan-printable" className="bg-white w-full max-w-[720px] p-6 text-[#111827] border-2 border-[#111827] rounded-md" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
             <p className="text-center text-[10px] font-bold tracking-wide">LORRY HIRE CHALLAN</p>
-            <h1 className="text-center text-2xl font-bold tracking-wide mt-1">{company.name.toUpperCase()}</h1>
-            {company.tagline && <p className="text-center text-[10px] italic mt-1">{company.tagline}</p>}
-            <p className="text-center text-xs mt-1">{company.address}</p>
-            <p className="text-center text-xs">{[company.phone, company.phone2].filter(Boolean).join(" / ")}{company.email ? `  Email - ${company.email}` : ""}</p>
+            <h1 className="text-center text-2xl font-bold tracking-wide mt-1">SHREE BIROBA ROADLINES</h1>
+            <p className="text-center text-[10px] italic mt-1">Transport Contractor & Carrying Heavy & ODC Size Consignment Services</p>
+            <p className="text-center text-xs mt-1">Shop No-03, 5th Floor, Geet Sidhi Commercial, Nr MNGL Gas Station, Big City Mart Bldg, Moshi, Pune - 412105</p>
+            <p className="text-center text-xs">7350005112 / 7757004694 &nbsp; Email - shreebirobaroadlines1980@gmail.com</p>
 
             <div className="border-t border-[#111827] mt-3 pt-2 grid grid-cols-2 text-xs gap-y-1">
               <p><span className="font-semibold">Challan No. :</span> {record.challanNo || record.freightId || record.id}</p>
@@ -2872,7 +2872,6 @@ function InvoicePreview({ invoice, trip, customer }: { invoice?: Invoice; trip?:
   const gst = Math.round(subtotal * 0.18);
   return <div className="rounded-[22px] ring-1 ring-white/70 shadow-xl overflow-hidden" style={glass}><div className="p-6 border-b border-white/50 flex justify-between gap-4"><div><h3 className="text-lg font-bold">Sharma Roadlines Pvt. Ltd.</h3><p className="text-xs text-[#717182]">GSTIN: 27AABCS1429B1Z1</p></div><div className="text-right"><p className="text-2xl font-bold">TAX INVOICE</p><p className="text-xs">{invoice.id}</p><Badge label={invoice.status} /></div></div><div className="p-6 border-b border-white/50"><p className="text-[10px] font-bold text-[#9CA3AF] uppercase">Bill To</p><p className="text-sm font-bold">{customer?.company}</p><p className="text-xs text-[#717182]">{customer?.gst}</p><p className="text-xs text-[#717182]">{customer?.address}</p></div><div className="p-6 text-sm space-y-2"><p className="flex justify-between"><span>Freight Charges - {trip.pickup} to {trip.drop}</span><b>{rupees(subtotal)}</b></p><p className="flex justify-between"><span>CGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between"><span>SGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between border-t border-black/10 pt-3 text-lg"><span>Grand Total</span><b>{rupees(subtotal + gst)}</b></p></div><div className="p-4 flex gap-2"><button onClick={() => window.print()} className="flex-1 rounded-2xl py-2 text-sm font-semibold" style={glassSubtle}><Printer size={14} className="inline mr-1" />Print</button><button className="flex-1 rounded-2xl py-2 text-sm font-semibold text-white bg-[#12151C]"><Send size={14} className="inline mr-1" />Send</button></div></div>;
 }
-
 
 
 
