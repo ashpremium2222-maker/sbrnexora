@@ -991,13 +991,16 @@ async function uploadFilesToServer(files: File[], type: string): Promise<Uploade
 function FileField({ label, onFiles, category = "document" }: { label: string; onFiles: (files: UploadedFile[]) => void; category?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  return <label className="mb-4 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#1a1d2e]/15 bg-white/35 px-4 py-6 cursor-pointer"><Upload size={18} /><span className="text-sm font-medium">{busy ? "Uploading..." : label}</span><span className="text-[10px] text-[#a0a3b1]">PDF, JPG, PNG</span>{error && <span className="text-[10px] text-red-500 font-medium">{error}</span>}<input type="file" multiple accept=".pdf,image/*" className="sr-only" onChange={async (e) => {
+  const [uploaded, setUploaded] = useState<UploadedFile[]>([]);
+  return <div className="mb-4">
+    <label className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#1a1d2e]/15 bg-white/35 px-4 py-6 cursor-pointer"><Upload size={18} /><span className="text-sm font-medium">{busy ? "Uploading..." : label}</span><span className="text-[10px] text-[#a0a3b1]">PDF, JPG, PNG</span>{error && <span className="text-[10px] text-red-500 font-medium">{error}</span>}<input type="file" multiple accept=".pdf,image/*" className="sr-only" onChange={async (e) => {
     const picked = Array.from(e.target.files ?? []);
     if (!picked.length) return;
     setBusy(true);
     setError("");
     try {
       const uploaded = await uploadFilesToServer(picked, category);
+      setUploaded(uploaded);
       onFiles(uploaded);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -1005,7 +1008,9 @@ function FileField({ label, onFiles, category = "document" }: { label: string; o
       setBusy(false);
       e.target.value = "";
     }
-  }} /></label>;
+    }} /></label>
+    {uploaded.length > 0 && <div className="mt-2 rounded-xl bg-emerald-50 px-3 py-2"><p className="text-[11px] font-semibold text-emerald-700">Uploaded to Supabase</p><div className="mt-1 flex flex-wrap gap-2">{uploaded.map((file) => <a key={`${file.fileName}-${file.dataUrl}`} href={file.dataUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-[#1a1d2e] ring-1 ring-emerald-200"><Eye size={12} />View {file.fileName}</a>)}</div></div>}
+  </div>;
 }
 
 export default function App() {
@@ -2878,7 +2883,6 @@ function InvoicePreview({ invoice, trip, customer }: { invoice?: Invoice; trip?:
   const gst = Math.round(subtotal * 0.18);
   return <div className="rounded-[22px] ring-1 ring-white/70 shadow-xl overflow-hidden" style={glass}><div className="p-6 border-b border-white/50 flex justify-between gap-4"><div><h3 className="text-lg font-bold">Sharma Roadlines Pvt. Ltd.</h3><p className="text-xs text-[#717182]">GSTIN: 27AABCS1429B1Z1</p></div><div className="text-right"><p className="text-2xl font-bold">TAX INVOICE</p><p className="text-xs">{invoice.id}</p><Badge label={invoice.status} /></div></div><div className="p-6 border-b border-white/50"><p className="text-[10px] font-bold text-[#9CA3AF] uppercase">Bill To</p><p className="text-sm font-bold">{customer?.company}</p><p className="text-xs text-[#717182]">{customer?.gst}</p><p className="text-xs text-[#717182]">{customer?.address}</p></div><div className="p-6 text-sm space-y-2"><p className="flex justify-between"><span>Freight Charges - {trip.pickup} to {trip.drop}</span><b>{rupees(subtotal)}</b></p><p className="flex justify-between"><span>CGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between"><span>SGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between border-t border-black/10 pt-3 text-lg"><span>Grand Total</span><b>{rupees(subtotal + gst)}</b></p></div><div className="p-4 flex gap-2"><button onClick={() => window.print()} className="flex-1 rounded-2xl py-2 text-sm font-semibold" style={glassSubtle}><Printer size={14} className="inline mr-1" />Print</button><button className="flex-1 rounded-2xl py-2 text-sm font-semibold text-white bg-[#12151C]"><Send size={14} className="inline mr-1" />Send</button></div></div>;
 }
-
 
 
 
