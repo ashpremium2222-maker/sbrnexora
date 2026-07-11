@@ -24,10 +24,13 @@ export function crudController(Model, { populate = "" } = {}) {
         if (value === "" && /(date|expiry)$/i.test(key)) delete req.body[key];
       }
       if (Array.isArray(req.body.documents)) {
-        req.body.documents = req.body.documents.map((document) => ({
-          ...document,
-          url: document.url || document.dataUrl,
-        }));
+        req.body.documents = req.body.documents.map((document) => {
+          const normalized = { ...document, url: document.url || document.dataUrl };
+          for (const [key, value] of Object.entries(normalized)) {
+            if (value === "" && /(date|expiry)$/i.test(key)) delete normalized[key];
+          }
+          return normalized;
+        });
       }
       const item = await Model.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
       if (!item) return res.status(404).json({ error: "Not found" });
