@@ -21,13 +21,13 @@ export function crudController(Model, { populate = "" } = {}) {
     },
     async update(req, res) {
       for (const [key, value] of Object.entries(req.body)) {
-        if (value === "" && /(date|expiry)$/i.test(key)) delete req.body[key];
+        if (["", "undefined", "null", "-"].includes(String(value).trim()) && /(date|expiry)$/i.test(key)) delete req.body[key];
       }
       if (Array.isArray(req.body.documents)) {
         req.body.documents = req.body.documents.map((document) => {
           const normalized = { ...document, url: document.url || document.dataUrl };
           for (const [key, value] of Object.entries(normalized)) {
-            if (value === "" && /(date|expiry)$/i.test(key)) delete normalized[key];
+            if (["", "undefined", "null", "-"].includes(String(value).trim()) && /(date|expiry)$/i.test(key)) delete normalized[key];
           }
           return normalized;
         });
