@@ -60,6 +60,12 @@ router.post("/uploads", upload.array("files", 8), async (req, res) => {
   });
 });
 
+router.patch("/trips/:id/pod", async (req, res) => {
+  const trip = await Trip.findByIdAndUpdate(req.params.id, { $set: { podDocs: req.body.podDocs || [] } }, { new: true, runValidators: false });
+  if (!trip) return res.status(404).json({ error: "Trip not found" });
+  res.json(trip);
+});
+
 router.post("/trips/:id/complete", authorize("admin", "manager"), async (req, res) => {
   const trip = await Trip.findByIdAndUpdate(req.params.id, { status: "Completed", podDocs: req.body.podDocs || [] }, { new: true });
   if (!trip) return res.status(404).json({ error: "Trip not found" });
