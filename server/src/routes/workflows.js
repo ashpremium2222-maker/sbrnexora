@@ -1,7 +1,7 @@
 import express from "express";
 import { Attendance, BalanceFreight, Customer, DocumentRecord, Expense, Invoice, Maintenance, Notification, Payment, Payroll, Trip, Vehicle, Driver } from "../models/index.js";
 import { authorize } from "../middleware/auth.js";
-import { upload } from "../middleware/upload.js";
+import { upload, uploadToStorage } from "../middleware/upload.js";
 
 const router = express.Router();
 
@@ -49,12 +49,13 @@ function analyzeTripProfit(trip, expenses) {
   };
 }
 
-router.post("/uploads", upload.array("files", 8), (req, res) => {
+router.post("/uploads", upload.array("files", 8), async (req, res) => {
+  const files = await Promise.all(req.files.map(uploadToStorage));
   res.status(201).json({
-    files: req.files.map((file) => ({
+    files: files.map((file) => ({
       type: req.body.type || "document",
-      fileName: file.originalname,
-      url: file.secure_url || file.url || file.path,
+      fileName: file.fileName,
+      url: file.url,
     })),
   });
 });
