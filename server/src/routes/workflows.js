@@ -54,7 +54,7 @@ router.post("/uploads", upload.array("files", 8), (req, res) => {
     files: req.files.map((file) => ({
       type: req.body.type || "document",
       fileName: file.originalname,
-      url: file.path,
+      url: file.secure_url || file.url || file.path,
     })),
   });
 });
