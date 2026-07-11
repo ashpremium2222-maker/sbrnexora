@@ -20,21 +20,25 @@ export function crudController(Model, { populate = "" } = {}) {
       res.status(201).json(item);
     },
     async update(req, res) {
-      for (const [key, value] of Object.entries(req.body)) {
-        if (["", "undefined", "null", "-"].includes(String(value).trim()) && /(date|expiry)$/i.test(key)) delete req.body[key];
+      try {
+        for (const [key, value] of Object.entries(req.body)) {
+          if (["", "undefined", "null", "-"].includes(String(value).trim()) && /(date|expiry)$/i.test(key)) delete req.body[key];
+        }
+        if (Array.isArray(req.body.documents)) {
+          req.body.documents = req.body.documents.map((document) => {
+            const normalized = { ...document, url: document.url || document.dataUrl };
+            for (const [key, value] of Object.entries(normalized)) {
+              if (["", "undefined", "null", "-"].includes(String(value).trim()) && /(date|expiry)$/i.test(key)) delete normalized[key];
+            }
+            return normalized;
+          });
+        }
+        const item = await Model.findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true, runValidators: false });
+        if (!item) return res.status(404).json({ error: "Not found" });
+        res.json(item);
+      } catch (error) {
+        res.status(400).json({ error: error instanceof Error ? error.message : "Update failed" });
       }
-      if (Array.isArray(req.body.documents)) {
-        req.body.documents = req.body.documents.map((document) => {
-          const normalized = { ...document, url: document.url || document.dataUrl };
-          for (const [key, value] of Object.entries(normalized)) {
-            if (["", "undefined", "null", "-"].includes(String(value).trim()) && /(date|expiry)$/i.test(key)) delete normalized[key];
-          }
-          return normalized;
-        });
-      }
-      const item = await Model.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: false });
-      if (!item) return res.status(404).json({ error: "Not found" });
-      res.json(item);
     },
     async remove(req, res) {
       const item = await Model.findByIdAndDelete(req.params.id);
