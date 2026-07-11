@@ -4,7 +4,7 @@ import {
   CreditCard, Download, Eye, FileText, Filter, Fuel, IndianRupee, LayoutDashboard, LogOut,
   Mail, MapPin, Package, Phone, Plus, Printer, Receipt, Route, Search, Send, Settings as SettingsIcon,
   ShieldCheck, Sparkles, Truck, Upload, User, UserCheck, Users, Wrench, X, Gauge, Battery, Wifi, Navigation, Activity, Minus, Locate,
-  Maximize2, Minimize2, Map as MapIcon, List as ListIcon, Sun, Moon,
+  Maximize2, Minimize2, Map as MapIcon, List as ListIcon, Sun, Moon, Trash2,
 } from "lucide-react";
 import {
   Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -1268,6 +1268,16 @@ export default function App() {
     notify("Booking deleted", `${id} removed from booking register.`, "trip");
     if (isMongoId(id)) apiFetch(`/trips/${id}`, authToken, { method: "DELETE" }).catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Booking was not removed from the database.", "alert"));
   }
+  function deleteVehicle(id: string) {
+    const target = vehicles.find((item) => item.id === id);
+    if (!target || !window.confirm(`Delete vehicle ${target.number}? This cannot be undone.`)) return;
+    setVehicles((prev) => prev.filter((item) => item.id !== id));
+    setDrivers((prev) => prev.map((item) => item.assignedVehicleId === id ? { ...item, assignedVehicleId: "" } : item));
+    setSelected((current) => current === id ? null : current);
+    setModal(null);
+    notify("Vehicle deleted", `${target.number} was removed from the fleet.`, "alert");
+    if (isMongoId(id)) apiFetch(`/vehicles/${id}`, authToken, { method: "DELETE" }).catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Vehicle was not removed from the database.", "alert"));
+  }
   function saveBalanceFreight() {
     let advances: AdvanceEntry[] = [];
     try { advances = JSON.parse(form.advancesJson || "[]"); } catch { advances = []; }
@@ -1427,7 +1437,7 @@ export default function App() {
 
   const page = (() => {
     if (view === "dashboard") return <Dashboard vehicles={vehicles} drivers={drivers} trips={trips} expenses={expenses} invoices={invoices} notes={notes} documents={documents} maintenancePlan={maintenancePlan} balanceFreights={balanceFreights} attendance={attendance} payroll={payroll} lastRefresh={lastRefresh} setView={setView} />;
-    if (view === "vehicles") return <Vehicles vehicles={vehicles} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} openModal={openModal} edit={(item) => openModal("vehicle", Object.fromEntries(Object.entries(item).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : String(v)])))} select={(id) => { setSelected(id); openModal("vehicleDetails"); }} />;
+    if (view === "vehicles") return <Vehicles vehicles={vehicles} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} openModal={openModal} edit={(item) => openModal("vehicle", Object.fromEntries(Object.entries(item).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : String(v)])))} select={(id) => { setSelected(id); openModal("vehicleDetails"); }} remove={deleteVehicle} />;
     if (view === "liveTracking") return <LiveTracking vehicles={vehicles} drivers={drivers} trips={trips} telemetryLog={telemetryLog} />;
     if (view === "drivers") return <Drivers drivers={drivers} search={search} setSearch={setSearch} openModal={openModal} edit={(item) => openModal("driver", Object.fromEntries(Object.entries(item).filter(([k]) => k !== "documents").map(([k, v]) => [k, String(v)])))} select={(id) => { setSelected(id); openModal("driverDetails"); }} />;
     if (view === "customers") return <Customers customers={customers} trips={trips} search={search} setSearch={setSearch} openModal={openModal} />;
@@ -1466,7 +1476,8 @@ export default function App() {
         const newDriverName = drivers.find((d) => d.id === newDriverId)?.name ?? "Driver";
         const closedHistory = (existing?.driverHistory ?? []).map((h) => (!h.endedAt && driverChanged ? { ...h, endedAt: today } : h));
         const driverHistory = driverChanged ? [...closedHistory, { driverId: newDriverId, driverName: newDriverName, vehicleId, vehicleNumber: form.number, assignedAt: today, reason: existing ? "Reassigned via vehicle edit" : "Initial assignment" }] : (existing?.driverHistory ?? []);
-        const item: Vehicle = { ...existing, id: vehicleId, number: form.number, model: form.model, type: form.type, chassisNumber: form.chassisNumber, engineNumber: form.engineNumber, ownerName: form.ownerName, ownerPhone: form.ownerPhone, registrationDate: form.registrationDate, fitnessExpiry: form.fitnessExpiry, currentDriverId: newDriverId || undefined, driverHistory, billingHistory: existing?.billingHistory ?? [], documentHistory: [...(existing?.documentHistory ?? []), ...files.map((f) => f.fileName)], status: (form.status || "Available") as Status, capacity: form.capacity || "20 tons", rcExpiry: form.rcExpiry, insuranceExpiry: form.insuranceExpiry, permitExpiry: form.permitExpiry, pucExpiry: form.pucExpiry || form.permitExpiry, documents: [...(existing?.documents ?? []), ...files.map((f) => ({ id: uid("vdoc"), category: f.category, fileName: f.fileName, dataUrl: f.dataUrl }))], telemetry: existing?.telemetry ?? defaultTelemetry({ status: (form.status || "Available") as Status }) };
+        const replacementCategories = new Set(files.filter((file) => file.category !== "Other").map((file) => file.category));
+        const item: Vehicle = { ...existing, id: vehicleId, number: form.number, model: form.model, type: form.type, chassisNumber: form.chassisNumber, engineNumber: form.engineNumber, ownerName: form.ownerName, ownerPhone: form.ownerPhone, registrationDate: form.registrationDate, fitnessExpiry: form.fitnessExpiry, currentDriverId: newDriverId || undefined, driverHistory, billingHistory: existing?.billingHistory ?? [], documentHistory: [...(existing?.documentHistory ?? []), ...files.map((f) => f.fileName)], status: (form.status || "Available") as Status, capacity: form.capacity || "20 tons", rcExpiry: form.rcExpiry, insuranceExpiry: form.insuranceExpiry, permitExpiry: form.permitExpiry, pucExpiry: form.pucExpiry || form.permitExpiry, documents: [...(existing?.documents ?? []).filter((document) => document.category === "Other" || !replacementCategories.has(document.category)), ...files.map((f) => ({ id: uid("vdoc"), category: f.category, fileName: f.fileName, dataUrl: f.dataUrl }))], telemetry: existing?.telemetry ?? defaultTelemetry({ status: (form.status || "Available") as Status }) };
         setVehicles((v) => form.id ? v.map((x) => x.id === form.id ? item : x) : [item, ...v]);
         if (driverChanged) setDrivers((d) => d.map((x) => {
           if (x.id === newDriverId) return { ...x, assignedVehicleId: vehicleId };
@@ -1881,7 +1892,7 @@ function Billing({ invoices, payments, trips, customers, balanceFreights, setInv
   </div>;
 }
 
-function Vehicles({ vehicles, search, setSearch, filter, setFilter, openModal, edit, select }: { vehicles: Vehicle[]; search: string; setSearch: (v: string) => void; filter: string; setFilter: (v: string) => void; openModal: (m: string) => void; edit: (vehicle: Vehicle) => void; select: (id: string) => void }) {
+function Vehicles({ vehicles, search, setSearch, filter, setFilter, openModal, edit, select, remove }: { vehicles: Vehicle[]; search: string; setSearch: (v: string) => void; filter: string; setFilter: (v: string) => void; openModal: (m: string) => void; edit: (vehicle: Vehicle) => void; select: (id: string) => void; remove: (id: string) => void }) {
   const filtered = vehicles.filter((v) => (filter === "All" || v.status === filter) && `${v.number} ${v.model}`.toLowerCase().includes(search.toLowerCase()));
   return <div><Toolbar title="Fleet Vehicles" subtitle={`${vehicles.length} total - ${vehicles.filter((v) => v.status === "On Trip").length} running - SBR Portal telemetry ready`} search={search} setSearch={setSearch} filters={<><select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle}><option>All</option><option>Available</option><option>On Trip</option><option>Under Maintenance</option></select><button className="px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Filter size={14} className="inline mr-1" />Columns</button></>} action={<button onClick={() => openModal("vehicle")} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add Vehicle</button>} />
     <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-4"><Metric title="Total Fleet" value={String(vehicles.length)} /><Metric title="Running" value={String(vehicles.filter((v) => v.status === "On Trip").length)} /><Metric title="Idle" value={String(vehicles.filter((v) => v.status === "Available").length)} /><Metric title="Offline" value={String(vehicles.filter((v) => telemetryOf(v).apiSync === "Offline").length)} /><Metric title="Maintenance" value={String(vehicles.filter((v) => v.status === "Under Maintenance").length)} /><Metric title="Avg Speed" value={`${Math.round(vehicles.reduce((s, v) => s + telemetryOf(v).speed, 0) / Math.max(vehicles.length, 1))} km/h`} /></div>
@@ -1916,7 +1927,7 @@ function Vehicles({ vehicles, search, setSearch, filter, setFilter, openModal, e
                   <td className="px-3 py-4"><p className="text-xs font-semibold"><MapPin size={12} className="inline mr-1" />{t.location}</p><p className="text-[10px] text-[#9CA3AF]">Updated {t.lastUpdated}</p></td>
                   <td className="px-3 py-4"><p className="text-xs whitespace-nowrap"><Battery size={13} className="inline mr-1" />{t.batteryVoltage}V</p></td>
                   <td className="px-3 py-4"><p className="text-xs whitespace-nowrap"><Wifi size={13} className="inline mr-1" />{t.gpsSignal}/5</p></td>
-                  <td className="px-3 py-4"><div className="flex gap-2"><button onClick={() => select(v.id)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="View Details" style={glassSubtle}><Eye size={15} /></button><button onClick={() => edit(v)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="Edit" style={glassSubtle}><SettingsIcon size={15} /></button></div></td>
+                  <td className="px-3 py-4"><div className="flex gap-2"><button onClick={() => select(v.id)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="View Details" style={glassSubtle}><Eye size={15} /></button><button onClick={() => edit(v)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="Edit" style={glassSubtle}><SettingsIcon size={15} /></button><button onClick={() => remove(v.id)} className="w-9 h-9 rounded-xl flex items-center justify-center text-red-600" title="Delete vehicle" style={glassSubtle}><Trash2 size={15} /></button></div></td>
                 </tr>
               );
             })}
@@ -1929,7 +1940,7 @@ function Vehicles({ vehicles, search, setSearch, filter, setFilter, openModal, e
           <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: v.status === "On Trip" ? "#10B98118" : v.status === "Available" ? "#F59E0B18" : "#EF444418" }}><Truck size={18} color={v.status === "On Trip" ? "#10B981" : v.status === "Available" ? "#F59E0B" : "#EF4444"} /></div>
           <div className="flex-1 min-w-[150px]"><p className="text-sm font-extrabold">{v.number}</p><p className="text-xs text-[#9CA3AF]">{v.model}</p><div className="mt-1"><Badge label={v.status} /></div></div>
           <div className="text-xs text-[#6B7280] space-y-0.5"><p>{t.ignition} - {t.speed || 0} km/h</p><p>Fuel {t.fuelLevel}% - {t.location}</p></div>
-          <div className="flex gap-2"><button onClick={() => select(v.id)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="View Details" style={glassSubtle}><Eye size={15} /></button><button onClick={() => edit(v)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="Edit" style={glassSubtle}><SettingsIcon size={15} /></button></div>
+          <div className="flex gap-2"><button onClick={() => select(v.id)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="View Details" style={glassSubtle}><Eye size={15} /></button><button onClick={() => edit(v)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="Edit" style={glassSubtle}><SettingsIcon size={15} /></button><button onClick={() => remove(v.id)} className="w-9 h-9 rounded-xl flex items-center justify-center text-red-600" title="Delete vehicle" style={glassSubtle}><Trash2 size={15} /></button></div>
         </Row>;
       })}
     </DataCard></div>;
@@ -2861,7 +2872,6 @@ function InvoicePreview({ invoice, trip, customer }: { invoice?: Invoice; trip?:
   const gst = Math.round(subtotal * 0.18);
   return <div className="rounded-[22px] ring-1 ring-white/70 shadow-xl overflow-hidden" style={glass}><div className="p-6 border-b border-white/50 flex justify-between gap-4"><div><h3 className="text-lg font-bold">Sharma Roadlines Pvt. Ltd.</h3><p className="text-xs text-[#717182]">GSTIN: 27AABCS1429B1Z1</p></div><div className="text-right"><p className="text-2xl font-bold">TAX INVOICE</p><p className="text-xs">{invoice.id}</p><Badge label={invoice.status} /></div></div><div className="p-6 border-b border-white/50"><p className="text-[10px] font-bold text-[#9CA3AF] uppercase">Bill To</p><p className="text-sm font-bold">{customer?.company}</p><p className="text-xs text-[#717182]">{customer?.gst}</p><p className="text-xs text-[#717182]">{customer?.address}</p></div><div className="p-6 text-sm space-y-2"><p className="flex justify-between"><span>Freight Charges - {trip.pickup} to {trip.drop}</span><b>{rupees(subtotal)}</b></p><p className="flex justify-between"><span>CGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between"><span>SGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between border-t border-black/10 pt-3 text-lg"><span>Grand Total</span><b>{rupees(subtotal + gst)}</b></p></div><div className="p-4 flex gap-2"><button onClick={() => window.print()} className="flex-1 rounded-2xl py-2 text-sm font-semibold" style={glassSubtle}><Printer size={14} className="inline mr-1" />Print</button><button className="flex-1 rounded-2xl py-2 text-sm font-semibold text-white bg-[#12151C]"><Send size={14} className="inline mr-1" />Send</button></div></div>;
 }
-
 
 
 
