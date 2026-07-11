@@ -20,6 +20,12 @@ export function crudController(Model, { populate = "" } = {}) {
       res.status(201).json(item);
     },
     async update(req, res) {
+      if (Array.isArray(req.body.documents)) {
+        req.body.documents = req.body.documents.map((document) => ({
+          ...document,
+          url: document.url || document.dataUrl,
+        }));
+      }
       const item = await Model.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
       if (!item) return res.status(404).json({ error: "Not found" });
       res.json(item);
