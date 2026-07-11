@@ -4,6 +4,7 @@ import { authorize } from "../middleware/auth.js";
 import { upload, uploadToStorage } from "../middleware/upload.js";
 
 const router = express.Router();
+const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
 const DAY_MS = 86400000;
 const documentStatus = (expiryDate) => {
@@ -49,7 +50,8 @@ function analyzeTripProfit(trip, expenses) {
   };
 }
 
-router.post("/uploads", upload.array("files", 8), async (req, res) => {
+router.post("/uploads", upload.array("files", 8), asyncRoute(async (req, res) => {
+  if (!req.files?.length) return res.status(400).json({ error: "Choose at least one PDF, JPG, or PNG file" });
   const files = await Promise.all(req.files.map(uploadToStorage));
   res.status(201).json({
     files: files.map((file) => ({
@@ -58,17 +60,18 @@ router.post("/uploads", upload.array("files", 8), async (req, res) => {
       url: file.url,
     })),
   });
-});
+}));
 
-router.patch("/trips/:id/pod", async (req, res) => {
-  try {
-    const trip = await Trip.findByIdAndUpdate(req.params.id, { $set: { podDocs: req.body.podDocs || [] } }, { new: true, runValidators: false });
-    if (!trip) return res.status(404).json({ error: "Trip not found" });
-    res.json(trip);
-  } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : "POD update failed" });
-  }
-});
+router.patch("/trips/:id/pod", asyncRoute(async (req, res) => {
+  const podDocs = (Array.isArray(req.body.podDocs) ? req.body.podDocs : [])
+    .filter(Boolean)
+    .map((entry) => typeof entry === "string"
+      ? { type: "POD", fileName: entry.split("/").pop()?.split("?")[0] || "POD document", url: entry }
+      : { type: entry.type || "POD", fileName: entry.fileName || "POD document", url: entry.url || entry.dataUrl });
+  const trip = await Trip.findByIdAndUpdate(req.params.id, { $set: { podDocs } }, { new: true, runValidators: false });
+  if (!trip) return res.status(404).json({ error: "Trip not found" });
+  res.json(trip);
+}));
 
 router.post("/trips/:id/complete", authorize("admin", "manager"), async (req, res) => {
   const trip = await Trip.findByIdAndUpdate(req.params.id, { status: "Completed", podDocs: req.body.podDocs || [] }, { new: true });

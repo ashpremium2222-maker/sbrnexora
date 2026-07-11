@@ -105,9 +105,11 @@ export const Customer = mongoose.model("Customer", new mongoose.Schema({
 }, { timestamps: true }));
 
 export const Trip = mongoose.model("Trip", new mongoose.Schema({
-  customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer", required: true },
-  vehicle: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle", required: true },
-  driver: { type: mongoose.Schema.Types.ObjectId, ref: "Driver", required: true },
+  // Existing records were created before linked IDs were enforced. Keeping
+  // them optional prevents old bookings from blocking document updates.
+  customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
+  vehicle: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle" },
+  driver: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },
   pickup: { type: String, required: true },
   drop: { type: String, required: true },
   lrNumber: String,
@@ -129,6 +131,12 @@ export const Trip = mongoose.model("Trip", new mongoose.Schema({
   paymentStatus: { type: String, enum: ["Paid", "Partial", "Pending", "Overdue"], default: "Pending" },
   ewayBill: String,
   deliveryReceipt: String,
+  size: String,
+  billNo: String,
+  chNo: String,
+  receivedDate: Date,
+  otherChargesReason: String,
+  remarks: String,
   status: { type: String, enum: ["Draft", "Assigned", "In Transit", "Completed", "Cancelled"], default: "Assigned" },
   profitAnalysis: moneyBreakdownSchema,
   podDocs: [documentSchema],

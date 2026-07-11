@@ -4,7 +4,7 @@ export function notFound(req, res) {
 
 export function errorHandler(err, req, res, next) {
   if (res.headersSent) return next(err);
-  const status = err.status || err.statusCode || 500;
+  const status = err.status || err.statusCode || (err.name === "ValidationError" || err.name === "CastError" ? 400 : 500);
   console.error(err);
   res.status(status).json({ error: err.message || "Internal server error" });
 }

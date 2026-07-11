@@ -120,7 +120,10 @@ function mapTripFromApi(doc: Record<string, unknown>): Trip {
     advanceAmount: Number(doc.advanceAmount || 0), tollCharges: Number(doc.tollCharges || 0), driverAllowance: Number(doc.driverAllowance || 0), otherExpenses: Number(doc.otherExpenses || 0),
     invoiceNumber: doc.invoiceNumber ? String(doc.invoiceNumber) : undefined, paymentStatus: (doc.paymentStatus as PaymentStatus) || "Pending",
     ewayBill: doc.ewayBill ? String(doc.ewayBill) : undefined, deliveryReceipt: doc.deliveryReceipt ? String(doc.deliveryReceipt) : undefined,
-    podDocs: ((doc.podDocs as Record<string, unknown>[]) || []).map((d) => String(d.url || d.fileName || "")), remarks: doc.remarks ? String(doc.remarks) : undefined,
+    size: doc.size ? String(doc.size) : undefined, billNo: doc.billNo ? String(doc.billNo) : undefined, chNo: doc.chNo ? String(doc.chNo) : undefined,
+    receivedDate: doc.receivedDate ? String(doc.receivedDate).slice(0, 10) : undefined,
+    otherChargesReason: doc.otherChargesReason ? String(doc.otherChargesReason) : undefined,
+    podDocs: ((doc.podDocs as Record<string, unknown>[]) || []).map((d) => String(d.url || d.fileName || "")).filter(Boolean), remarks: doc.remarks ? String(doc.remarks) : undefined,
   };
 }
 function tripToApiPayload(item: Trip) {
@@ -130,6 +133,8 @@ function tripToApiPayload(item: Trip) {
     date: item.date || undefined, endDate: item.endDate || undefined, distanceKm: item.distanceKm, durationHrs: item.durationHrs, freight: item.freight, advanceAmount: item.advanceAmount,
     tollCharges: item.tollCharges, driverAllowance: item.driverAllowance, otherExpenses: item.otherExpenses, invoiceNumber: item.invoiceNumber, paymentStatus: item.paymentStatus,
     ewayBill: item.ewayBill, deliveryReceipt: item.deliveryReceipt, status: item.status, remarks: item.remarks,
+    size: item.size, billNo: item.billNo, chNo: item.chNo, receivedDate: item.receivedDate || undefined,
+    otherChargesReason: item.otherChargesReason,
   };
 }
 
@@ -1059,13 +1064,13 @@ export default function App() {
   const [vehiclesLoaded, setVehiclesLoaded] = useState(false);
   const [vehiclesError, setVehiclesError] = useState("");
   const [drivers, setDrivers] = useState<Driver[]>([]);
-  const [customers, setCustomers] = useState(seedCustomers);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
-  const [expenses, setExpenses] = useState(seedExpenses);
-  const [invoices, setInvoices] = useState(seedInvoices);
-  const [payments, setPayments] = useState(seedPayments);
-  const [documents, setDocuments] = useState(seedDocuments);
-  const [maintenancePlan, setMaintenancePlan] = useState(seedMaintenance);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [maintenancePlan, setMaintenancePlan] = useState<MaintenanceRecord[]>([]);
   const [balanceFreights, setBalanceFreights] = useState<BalanceFreightRecord[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [payroll, setPayroll] = useState<PayrollRecord[]>([]);
@@ -1219,7 +1224,8 @@ export default function App() {
     notify("Payment updated", `${invoice.id} paid ${rupees(amount)}. Pending balance ${rupees(Math.max(total - paidAmount, 0))}.`, "payment");
     setModal(null);
   }
-  function saveTrip(files: string[]) {
+  function saveTrip(files: UploadedFile[]) {
+    const podUrls = files.map((file) => file.dataUrl).filter(Boolean);
     if (form.id) {
       setTrips((prev) => prev.map((t) => t.id !== form.id ? t : {
         ...t,
@@ -1242,18 +1248,18 @@ export default function App() {
         ewayBill: form.ewayBill ?? t.ewayBill,
         deliveryReceipt: form.deliveryReceipt ?? t.deliveryReceipt,
         remarks: form.remarks ?? t.remarks,
-        podDocs: files.length ? [...t.podDocs, ...files] : t.podDocs,
+        podDocs: podUrls.length ? [...t.podDocs, ...podUrls] : t.podDocs,
       }));
       notify("Booking updated", `${form.id} details saved.`, "trip");
       setModal(null);
       if (isMongoId(form.id)) {
         const updated = trips.find((t) => t.id === form.id);
-        if (updated) apiFetch(`/trips/${form.id}`, authToken, { method: "PATCH", body: JSON.stringify(tripToApiPayload({ ...updated, podDocs: files.length ? [...updated.podDocs, ...files] : updated.podDocs })) }).catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Booking update was not saved.", "alert"));
+        if (updated) apiFetch(`/trips/${form.id}`, authToken, { method: "PATCH", body: JSON.stringify(tripToApiPayload({ ...updated, podDocs: podUrls.length ? [...updated.podDocs, ...podUrls] : updated.podDocs })) }).catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Booking update was not saved.", "alert"));
       }
       return;
     }
     const assignedDriverId = vehicles.find((v) => v.id === form.vehicleId)?.currentDriverId || form.driverId || "";
-    const newTrip: Trip = { id: uid("TRIP"), lrNumber: uid("LR"), customerId: form.customerId, vehicleId: form.vehicleId, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo || "", chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advanceAmount: Number(form.advanceAmount || 0), tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: files, remarks: form.remarks || "" };
+    const newTrip: Trip = { id: uid("TRIP"), lrNumber: uid("LR"), customerId: form.customerId, vehicleId: form.vehicleId, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo || "", chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advanceAmount: Number(form.advanceAmount || 0), tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: podUrls, remarks: form.remarks || "" };
     setTrips((t) => [newTrip, ...t]);
     setVehicles((v) => v.map((x) => x.id === newTrip.vehicleId ? { ...x, status: "On Trip" } : x));
     if (assignedDriverId) { setDrivers((d) => d.map((x) => x.id === assignedDriverId ? { ...x, status: "On Trip", assignedVehicleId: newTrip.vehicleId } : x)); markAttendance(assignedDriverId, newTrip.date, "Present", `Auto-marked: vehicle ${vehicle(newTrip.vehicleId)?.number ?? ""} running trip ${newTrip.id}`); }
@@ -2569,8 +2575,8 @@ function CustomerForm({ form, setForm, onSave }: { form: Record<string, string>;
     <Save onClick={onSave} />
   </>;
 }
-function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record<string, string>; setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>; customers: Customer[]; vehicles: Vehicle[]; onSave: (files: string[]) => void }) {
-  const [files, setFiles] = useState<string[]>([]);
+function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record<string, string>; setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>; customers: Customer[]; vehicles: Vehicle[]; onSave: (files: UploadedFile[]) => void }) {
+  const [files, setFiles] = useState<UploadedFile[]>([]);
   const [showCharges, setShowCharges] = useState(false);
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const availableVehicles = vehicles.filter((v) => v.status === "Available" || v.id === form.vehicleId);
@@ -2606,7 +2612,7 @@ function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record
     <SelectField label="Payment Status" value={form.paymentStatus || "Pending"} onChange={(v) => set("paymentStatus", v)} options={["Paid", "Partial", "Pending", "Overdue"].map((x) => ({ value: x, label: x }))} />
     <Field label="E-way Bill" value={form.ewayBill || ""} onChange={(v) => set("ewayBill", v)} />
     <Field label="Delivery Receipt" value={form.deliveryReceipt || ""} onChange={(v) => set("deliveryReceipt", v)} />
-    <FileField label="Upload e-way bill, POD, delivery receipt or invoice" onFiles={(uploaded) => setFiles(uploaded.map((f) => f.fileName))} />
+    <FileField label="Upload e-way bill, POD, delivery receipt or invoice" category="pod" onFiles={setFiles} />
     <div className="rounded-2xl p-4 mb-4 text-sm font-bold" style={glassSubtle}>Total expenses: {rupees(totalExpenses)} - Profit/Loss: {rupees(freight - totalExpenses)}</div>
     <Save onClick={() => onSave(files)} />
   </>;
@@ -2872,8 +2878,6 @@ function InvoicePreview({ invoice, trip, customer }: { invoice?: Invoice; trip?:
   const gst = Math.round(subtotal * 0.18);
   return <div className="rounded-[22px] ring-1 ring-white/70 shadow-xl overflow-hidden" style={glass}><div className="p-6 border-b border-white/50 flex justify-between gap-4"><div><h3 className="text-lg font-bold">Sharma Roadlines Pvt. Ltd.</h3><p className="text-xs text-[#717182]">GSTIN: 27AABCS1429B1Z1</p></div><div className="text-right"><p className="text-2xl font-bold">TAX INVOICE</p><p className="text-xs">{invoice.id}</p><Badge label={invoice.status} /></div></div><div className="p-6 border-b border-white/50"><p className="text-[10px] font-bold text-[#9CA3AF] uppercase">Bill To</p><p className="text-sm font-bold">{customer?.company}</p><p className="text-xs text-[#717182]">{customer?.gst}</p><p className="text-xs text-[#717182]">{customer?.address}</p></div><div className="p-6 text-sm space-y-2"><p className="flex justify-between"><span>Freight Charges - {trip.pickup} to {trip.drop}</span><b>{rupees(subtotal)}</b></p><p className="flex justify-between"><span>CGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between"><span>SGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between border-t border-black/10 pt-3 text-lg"><span>Grand Total</span><b>{rupees(subtotal + gst)}</b></p></div><div className="p-4 flex gap-2"><button onClick={() => window.print()} className="flex-1 rounded-2xl py-2 text-sm font-semibold" style={glassSubtle}><Printer size={14} className="inline mr-1" />Print</button><button className="flex-1 rounded-2xl py-2 text-sm font-semibold text-white bg-[#12151C]"><Send size={14} className="inline mr-1" />Send</button></div></div>;
 }
-
-
 
 
 
