@@ -61,9 +61,13 @@ router.post("/uploads", upload.array("files", 8), async (req, res) => {
 });
 
 router.patch("/trips/:id/pod", async (req, res) => {
-  const trip = await Trip.findByIdAndUpdate(req.params.id, { $set: { podDocs: req.body.podDocs || [] } }, { new: true, runValidators: false });
-  if (!trip) return res.status(404).json({ error: "Trip not found" });
-  res.json(trip);
+  try {
+    const trip = await Trip.findByIdAndUpdate(req.params.id, { $set: { podDocs: req.body.podDocs || [] } }, { new: true, runValidators: false });
+    if (!trip) return res.status(404).json({ error: "Trip not found" });
+    res.json(trip);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "POD update failed" });
+  }
 });
 
 router.post("/trips/:id/complete", authorize("admin", "manager"), async (req, res) => {
