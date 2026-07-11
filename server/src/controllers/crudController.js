@@ -20,6 +20,9 @@ export function crudController(Model, { populate = "" } = {}) {
       res.status(201).json(item);
     },
     async update(req, res) {
+      for (const [key, value] of Object.entries(req.body)) {
+        if (value === "" && /(date|expiry)$/i.test(key)) delete req.body[key];
+      }
       if (Array.isArray(req.body.documents)) {
         req.body.documents = req.body.documents.map((document) => ({
           ...document,
