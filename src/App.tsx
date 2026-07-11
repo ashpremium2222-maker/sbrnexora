@@ -120,7 +120,7 @@ function mapTripFromApi(doc: Record<string, unknown>): Trip {
     advanceAmount: Number(doc.advanceAmount || 0), tollCharges: Number(doc.tollCharges || 0), driverAllowance: Number(doc.driverAllowance || 0), otherExpenses: Number(doc.otherExpenses || 0),
     invoiceNumber: doc.invoiceNumber ? String(doc.invoiceNumber) : undefined, paymentStatus: (doc.paymentStatus as PaymentStatus) || "Pending",
     ewayBill: doc.ewayBill ? String(doc.ewayBill) : undefined, deliveryReceipt: doc.deliveryReceipt ? String(doc.deliveryReceipt) : undefined,
-    podDocs: ((doc.podDocs as Record<string, unknown>[]) || []).map((d) => String(d.fileName || d.url || "")), remarks: doc.remarks ? String(doc.remarks) : undefined,
+    podDocs: ((doc.podDocs as Record<string, unknown>[]) || []).map((d) => String(d.url || d.fileName || "")), remarks: doc.remarks ? String(doc.remarks) : undefined,
   };
 }
 function tripToApiPayload(item: Trip) {
@@ -1146,12 +1146,12 @@ export default function App() {
   }
   function openModal(name: string, seed: Record<string, string> = {}) { setForm(seed); setModal(name); }
   function handlePodUpload(tripId: string, files: UploadedFile[]) {
-    const fileNames = files.map((f) => f.fileName);
-    setTrips((prev) => prev.map((t) => t.id === tripId ? { ...t, podDocs: [...t.podDocs, ...fileNames] } : t));
+    const podUrls = files.map((f) => f.dataUrl);
+    setTrips((prev) => prev.map((t) => t.id === tripId ? { ...t, podDocs: [...t.podDocs, ...podUrls] } : t));
     notify("POD uploaded", `${files.length} file(s) attached to ${tripId}.`, "document");
     if (/^[0-9a-f]{24}$/i.test(tripId)) {
       const trip = trips.find((t) => t.id === tripId);
-      const podDocs = [...(trip?.podDocs || []), ...fileNames];
+      const podDocs = [...(trip?.podDocs || []), ...podUrls];
       apiFetch(`/trips/${tripId}`, authToken, { method: "PATCH", body: JSON.stringify({ podDocs }) }).catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "POD was not saved to the database.", "alert"));
     }
   }
@@ -2872,7 +2872,6 @@ function InvoicePreview({ invoice, trip, customer }: { invoice?: Invoice; trip?:
   const gst = Math.round(subtotal * 0.18);
   return <div className="rounded-[22px] ring-1 ring-white/70 shadow-xl overflow-hidden" style={glass}><div className="p-6 border-b border-white/50 flex justify-between gap-4"><div><h3 className="text-lg font-bold">Sharma Roadlines Pvt. Ltd.</h3><p className="text-xs text-[#717182]">GSTIN: 27AABCS1429B1Z1</p></div><div className="text-right"><p className="text-2xl font-bold">TAX INVOICE</p><p className="text-xs">{invoice.id}</p><Badge label={invoice.status} /></div></div><div className="p-6 border-b border-white/50"><p className="text-[10px] font-bold text-[#9CA3AF] uppercase">Bill To</p><p className="text-sm font-bold">{customer?.company}</p><p className="text-xs text-[#717182]">{customer?.gst}</p><p className="text-xs text-[#717182]">{customer?.address}</p></div><div className="p-6 text-sm space-y-2"><p className="flex justify-between"><span>Freight Charges - {trip.pickup} to {trip.drop}</span><b>{rupees(subtotal)}</b></p><p className="flex justify-between"><span>CGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between"><span>SGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between border-t border-black/10 pt-3 text-lg"><span>Grand Total</span><b>{rupees(subtotal + gst)}</b></p></div><div className="p-4 flex gap-2"><button onClick={() => window.print()} className="flex-1 rounded-2xl py-2 text-sm font-semibold" style={glassSubtle}><Printer size={14} className="inline mr-1" />Print</button><button className="flex-1 rounded-2xl py-2 text-sm font-semibold text-white bg-[#12151C]"><Send size={14} className="inline mr-1" />Send</button></div></div>;
 }
-
 
 
 
