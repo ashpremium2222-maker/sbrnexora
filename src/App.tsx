@@ -164,10 +164,10 @@ function companyExpenseToApiPayload(item: CompanyExpense) {
   return { name: item.name, amount: item.amount, date: item.date || undefined, note: item.note };
 }
 function mapEmiReminderFromApi(doc: Record<string, unknown>): EmiReminder {
-  return { id: String(doc._id), name: String(doc.name || ""), amount: Number(doc.amount || 0), dueDay: Number(doc.dueDay || 1), tenureMonths: Number(doc.tenureMonths || 1), startDate: String(doc.startDate || "").slice(0, 10), note: String(doc.note || ""), status: doc.status === "Closed" ? "Closed" : "Active" };
+  return { id: String(doc._id), name: String(doc.name || ""), amount: Number(doc.amount || 0), dueDay: Number(doc.dueDay || 1), tenureMonths: Number(doc.tenureMonths || 1), startDate: String(doc.startDate || "").slice(0, 10), note: String(doc.note || ""), status: doc.status === "Closed" ? "Closed" : "Active", paidMonths: Array.isArray(doc.paidMonths) ? doc.paidMonths.map(String) : [] };
 }
 function emiReminderToApiPayload(item: EmiReminder) {
-  return { name: item.name, amount: item.amount, dueDay: item.dueDay, tenureMonths: item.tenureMonths, startDate: item.startDate || undefined, note: item.note, status: item.status };
+  return { name: item.name, amount: item.amount, dueDay: item.dueDay, tenureMonths: item.tenureMonths, startDate: item.startDate || undefined, note: item.note, status: item.status, paidMonths: item.paidMonths };
 }
 
 function mapInvoiceFromApi(doc: Record<string, unknown>): Invoice {
@@ -298,7 +298,7 @@ type CompanyExpense = {
   // modals do not break. The database model contains company expenses only.
   type: "Expense" | "EMI"; reminderDate: string; status: "Pending" | "Paid";
 };
-type EmiReminder = { id: string; name: string; amount: number; dueDay: number; tenureMonths: number; startDate: string; note: string; status: "Active" | "Closed" };
+type EmiReminder = { id: string; name: string; amount: number; dueDay: number; tenureMonths: number; startDate: string; note: string; status: "Active" | "Closed"; paidMonths: string[] };
 type Invoice = {
   id: string; tripId: string; customerId: string; status: PaymentStatus; dueDate: string; paidAt?: string; total?: number; paidAmount?: number;
   invoiceNo?: string; billingDate?: string; additionalCharges?: number; discount?: number; gst?: number; finalAmount?: number; paymentMode?: string; receiptFile?: string;
@@ -1173,7 +1173,8 @@ export default function App() {
     const dueNow = emiReminders.filter((item) => {
       const elapsed = elapsedMonths(item.startDate);
       const dueDay = Math.min(item.dueDay, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate());
-      return item.status === "Active" && elapsed >= 0 && elapsed < item.tenureMonths && now.getDate() >= dueDay;
+      const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      return item.status === "Active" && elapsed >= 0 && elapsed < item.tenureMonths && now.getDate() >= dueDay && !item.paidMonths.includes(thisMonth);
     });
     setNotes((previous) => [
       ...previous.filter((note) => note.type !== "emi"),
@@ -1559,7 +1560,16 @@ export default function App() {
         .then(() => notify("Company expense deleted", "The record was removed from the database."))
         .catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Company expense could not be deleted.", "alert"));
     }} exportCsv={exportCsv} />;
-    if (view === "emiReminders") return <EmiReminders records={emiReminders} openModal={openModal} remove={(id) => {
+    if (view === "emiReminders") return <EmiReminders records={emiReminders} openModal={openModal} markPaid={(id) => {
+      const thisMonth = new Date().toISOString().slice(0, 7);
+      const updated = emiReminders.find((item) => item.id === id);
+      if (!updated) return;
+      const next = { ...updated, paidMonths: Array.from(new Set([...updated.paidMonths, thisMonth])) };
+      setEmiReminders((items) => items.map((item) => item.id === id ? next : item));
+      apiFetch(`/emiReminders/${id}`, authToken, { method: "PATCH", body: JSON.stringify(emiReminderToApiPayload(next)) })
+        .then((doc) => { setEmiReminders((items) => items.map((item) => item.id === id ? mapEmiReminderFromApi(doc) : item)); notify("EMI marked paid", "This month’s EMI alert has been cleared."); })
+        .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "EMI payment status could not be saved.", "alert"));
+    }} remove={(id) => {
       setEmiReminders((items) => items.filter((item) => item.id !== id));
       apiFetch(`/emiReminders/${id}`, authToken, { method: "DELETE" })
         .then(() => notify("EMI reminder deleted", "The reminder was removed from the database."))
@@ -1680,7 +1690,7 @@ export default function App() {
           .catch((err) => { setCompanyExpenses((items) => items.filter((entry) => entry.id !== item.id)); notify("Cloud save failed", err instanceof Error ? err.message : "Company expense was not saved to the database.", "alert"); });
       }} /></Modal>}
       {modal === "emiReminder" && <Modal title="Add EMI Reminder" onClose={() => setModal(null)}><EmiReminderForm form={form} setForm={setForm} onSave={() => {
-        const item: EmiReminder = { id: uid("emi"), name: form.name || "EMI", amount: Number(form.amount || 0), dueDay: Math.min(31, Math.max(1, Number(form.dueDay || 1))), tenureMonths: Math.max(1, Number(form.tenureMonths || 1)), startDate: form.startDate || today, note: form.note || "", status: "Active" };
+        const item: EmiReminder = { id: uid("emi"), name: form.name || "EMI", amount: Number(form.amount || 0), dueDay: Math.min(31, Math.max(1, Number(form.dueDay || 1))), tenureMonths: Math.max(1, Number(form.tenureMonths || 1)), startDate: form.startDate || today, note: form.note || "", status: "Active", paidMonths: [] };
         setEmiReminders((items) => [item, ...items]);
         setModal(null);
         apiFetch("/emiReminders", authToken, { method: "POST", body: JSON.stringify(emiReminderToApiPayload(item)) })
@@ -2233,8 +2243,9 @@ function CompanyExpenses({ records, openModal, remove, exportCsv }: { records: C
   </div>;
 }
 
-function EmiReminders({ records, openModal, remove }: { records: EmiReminder[]; openModal: (m: string, f?: Record<string, string>) => void; remove: (id: string) => void }) {
+function LegacyEmiReminders({ records, openModal, markPaid, remove }: { records: EmiReminder[]; openModal: (m: string, f?: Record<string, string>) => void; markPaid: (id: string) => void; remove: (id: string) => void }) {
   const now = new Date();
+  const thisMonth = now.toISOString().slice(0, 7);
   const monthOffset = (startDate: string) => { const start = new Date(`${startDate}T00:00:00`); return (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth(); };
   const isCurrent = (record: EmiReminder) => { const offset = monthOffset(record.startDate); return record.status === "Active" && offset >= 0 && offset < record.tenureMonths; };
   const current = records.filter(isCurrent).sort((a, b) => a.dueDay - b.dueDay);
@@ -2242,6 +2253,19 @@ function EmiReminders({ records, openModal, remove }: { records: EmiReminder[]; 
     <div className="rounded-2xl p-5 mb-5 border-2 border-red-400 bg-red-50"><p className="text-lg font-extrabold text-red-800">⚠ Monthly EMI alerts</p><p className="text-sm font-semibold text-red-700 mt-1">EMI due reminders are shown prominently in Alerts on the selected date, for every month of the selected tenure.</p></div>
     <div className="grid md:grid-cols-3 gap-4 mb-5"><Metric title="Active EMIs" value={String(current.length)} /><Metric title="Monthly commitment" value={rupees(current.reduce((sum, record) => sum + record.amount, 0))} /><Metric title="Next due day" value={current[0] ? `${current[0].dueDay} of month` : "-"} /></div>
     <DataCard>{records.length ? records.map((record) => { const elapsed = Math.max(0, monthOffset(record.startDate)); const remaining = Math.max(0, record.tenureMonths - elapsed); const dueTodayOrPast = isCurrent(record) && now.getDate() >= record.dueDay; return <Row key={record.id}><Bell size={18} className={dueTodayOrPast ? "text-red-600" : "text-amber-500"} /><div className="flex-1"><p className={dueTodayOrPast ? "text-sm font-extrabold text-red-700" : "text-sm font-semibold"}>{record.name}</p><p className="text-xs text-[#8A94A6]">Every month on day {record.dueDay} · {remaining} of {record.tenureMonths} months remaining{record.note ? ` · ${record.note}` : ""}</p></div><p className="font-bold text-sm">{rupees(record.amount)}</p><Badge label={record.status} /><button onClick={() => { if (window.confirm(`Delete ${record.name}?`)) remove(record.id); }} className="p-2 rounded-xl text-red-600" title="Delete EMI reminder"><Trash2 size={16} /></button></Row>; }) : <EmptyState label="No EMI reminders saved yet" />}</DataCard>
+  </div>;
+}
+
+function EmiReminders({ records, openModal, markPaid, remove }: { records: EmiReminder[]; openModal: (m: string, f?: Record<string, string>) => void; markPaid: (id: string) => void; remove: (id: string) => void }) {
+  const now = new Date();
+  const thisMonth = now.toISOString().slice(0, 7);
+  const monthOffset = (startDate: string) => { const start = new Date(`${startDate}T00:00:00`); return (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth(); };
+  const isCurrent = (record: EmiReminder) => { const offset = monthOffset(record.startDate); return record.status === "Active" && offset >= 0 && offset < record.tenureMonths; };
+  const active = records.filter(isCurrent).sort((a, b) => a.dueDay - b.dueDay);
+  return <div><Toolbar title="EMI Reminders" subtitle={`${active.length} active monthly EMI reminders`} action={<button onClick={() => openModal("emiReminder", { dueDay: "1", tenureMonths: "12", startDate: today })} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add EMI Reminder</button>} />
+    <div className="rounded-2xl p-5 mb-5 border-2 border-red-400 bg-red-50"><p className="text-lg font-extrabold text-red-800">EMI due alerts</p><p className="text-sm font-semibold text-red-700 mt-1">Marking an EMI paid clears only this month’s alert. The next monthly alert appears automatically until the tenure ends.</p></div>
+    <div className="grid md:grid-cols-3 gap-4 mb-5"><Metric title="Active EMIs" value={String(active.length)} /><Metric title="Monthly commitment" value={rupees(active.reduce((sum, record) => sum + record.amount, 0))} /><Metric title="Next due day" value={active[0] ? `${active[0].dueDay} of month` : "-"} /></div>
+    <DataCard>{records.length ? records.map((record) => { const elapsed = Math.max(0, monthOffset(record.startDate)); const remaining = Math.max(0, record.tenureMonths - elapsed); const paidThisMonth = record.paidMonths.includes(thisMonth); const due = isCurrent(record) && now.getDate() >= record.dueDay && !paidThisMonth; return <Row key={record.id}><Bell size={18} className={due ? "text-red-600" : paidThisMonth ? "text-emerald-600" : "text-amber-500"} /><div className="flex-1"><p className={due ? "text-sm font-extrabold text-red-700" : "text-sm font-semibold"}>{record.name}</p><p className="text-xs text-[#8A94A6]">Every month on day {record.dueDay} · {remaining} of {record.tenureMonths} months remaining{record.note ? ` · ${record.note}` : ""}</p></div><p className="font-bold text-sm">{rupees(record.amount)}</p><Badge label={paidThisMonth ? "Paid this month" : record.status} />{isCurrent(record) && <button onClick={() => !paidThisMonth && markPaid(record.id)} disabled={paidThisMonth} className={`px-3 py-2 rounded-xl text-xs font-bold ${paidThisMonth ? "bg-emerald-100 text-emerald-700 cursor-default" : "bg-emerald-600 text-white"}`}>{paidThisMonth ? "Paid" : "Mark paid"}</button>}<button onClick={() => { if (window.confirm(`Delete ${record.name}?`)) remove(record.id); }} className="p-2 rounded-xl text-red-600" title="Delete EMI reminder"><Trash2 size={16} /></button></Row>; }) : <EmptyState label="No EMI reminders saved yet" />}</DataCard>
   </div>;
 }
 

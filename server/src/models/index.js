@@ -179,6 +179,8 @@ export const EmiReminder = mongoose.model("EmiReminder", new mongoose.Schema({
   startDate: { type: Date, required: true },
   note: { type: String, default: "" },
   status: { type: String, enum: ["Active", "Closed"], default: "Active" },
+  // YYYY-MM entries that have been paid. This lets the next month's reminder return.
+  paidMonths: { type: [String], default: [] },
 }, { timestamps: true }));
 
 export const Invoice = mongoose.model("Invoice", new mongoose.Schema({
