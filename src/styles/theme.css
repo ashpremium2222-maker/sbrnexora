@@ -310,3 +310,11 @@ input[type="number"] {
 /* Recharts labels/gridlines - keep readable on dark backgrounds */
 .dark .recharts-cartesian-axis-tick text { fill: var(--muted-foreground); }
 .dark .recharts-legend-item-text { color: var(--muted-foreground) !important; }
+
+/* Keep navigation independently scrollable while the page content scrolls separately. */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.55) transparent;
+}
+.sidebar-scroll::-webkit-scrollbar { width: 6px; }
+.sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.55); border-radius: 999px; }

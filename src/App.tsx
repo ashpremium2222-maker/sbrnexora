@@ -708,12 +708,13 @@ function Shell({
   const dateLabel = now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   return (
     <div className="min-h-screen w-full flex font-[Inter,sans-serif] relative overflow-hidden" style={{ background: "var(--background)" }}>
-      <aside className={`hidden md:flex flex-col py-5 px-2 gap-0.5 z-20 relative overflow-y-auto transition-all bg-[#0B111C] shadow-2xl ${collapsed ? "w-[88px] items-center" : "w-[238px]"}`}>
+      <aside className={`hidden md:flex flex-col py-5 px-2 gap-0.5 z-20 relative overflow-hidden transition-all bg-[#0B111C] shadow-2xl ${collapsed ? "w-[88px] items-center" : "w-[238px]"}`}>
         <div className={`mb-3 flex items-center gap-3 ${collapsed ? "justify-center" : "justify-between w-full"}`}>
           <button onClick={() => setView("dashboard")} aria-label="SBR Portal dashboard" className="w-12 h-12 rounded-2xl flex items-center justify-center bg-white shadow-lg shrink-0 overflow-hidden"><img src="/sbr-logo.png" alt="SBR Portal" className="w-full h-full object-cover" /></button>
           {!collapsed && <span className="text-sm font-bold text-white">SBR Portal</span>}
           <button onClick={() => setCollapsed((value) => !value)} title={collapsed ? "Expand sidebar" : "Collapse sidebar"} className="w-9 h-9 rounded-2xl flex items-center justify-center bg-white/10 text-white"><ChevronRight size={15} className={collapsed ? "" : "rotate-180"} /></button>
         </div>
+        <nav className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden pr-1 sidebar-scroll" aria-label="Portal navigation">
         {sections.map((section, sectionIndex) => (
           <div key={section} className="w-full">
             {sectionIndex > 0 && (collapsed
@@ -731,6 +732,7 @@ function Shell({
             })}
           </div>
         ))}
+        </nav>
         <button onClick={logout} title="Logout" className="mt-auto w-10 h-10 rounded-2xl flex items-center justify-center bg-white/10 text-white"><LogOut size={16} /></button>
       </aside>
       <main className="flex-1 z-10 overflow-y-auto max-h-screen p-5 md:p-8">
