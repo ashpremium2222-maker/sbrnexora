@@ -162,15 +162,23 @@ export const Expense = mongoose.model("Expense", new mongoose.Schema({
 }, { timestamps: true }));
 
 // Company overhead is deliberately kept separate from trip/fleet expenses.
-// This makes rent, office costs and loan EMIs visible without altering trip profit.
 export const CompanyExpense = mongoose.model("CompanyExpense", new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   amount: { type: Number, required: true, min: 0 },
   date: { type: Date, required: true },
   note: { type: String, default: "" },
-  type: { type: String, enum: ["Expense", "EMI"], default: "Expense" },
-  reminderDate: Date,
-  status: { type: String, enum: ["Pending", "Paid"], default: "Pending" },
+}, { timestamps: true }));
+
+// Recurring loan/EMI reminder. The client turns this into a bold in-app
+// notification each month until the selected tenure has ended.
+export const EmiReminder = mongoose.model("EmiReminder", new mongoose.Schema({
+  name: { type: String, required: true, trim: true },
+  amount: { type: Number, required: true, min: 0 },
+  dueDay: { type: Number, required: true, min: 1, max: 31 },
+  tenureMonths: { type: Number, required: true, min: 1 },
+  startDate: { type: Date, required: true },
+  note: { type: String, default: "" },
+  status: { type: String, enum: ["Active", "Closed"], default: "Active" },
 }, { timestamps: true }));
 
 export const Invoice = mongoose.model("Invoice", new mongoose.Schema({

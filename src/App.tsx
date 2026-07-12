@@ -158,10 +158,16 @@ function expenseToApiPayload(item: Expense) {
 }
 
 function mapCompanyExpenseFromApi(doc: Record<string, unknown>): CompanyExpense {
-  return { id: String(doc._id), name: String(doc.name || ""), amount: Number(doc.amount || 0), date: String(doc.date || "").slice(0, 10), note: String(doc.note || ""), type: doc.type === "EMI" ? "EMI" : "Expense", reminderDate: doc.reminderDate ? String(doc.reminderDate).slice(0, 10) : "", status: doc.status === "Paid" ? "Paid" : "Pending" };
+  return { id: String(doc._id), name: String(doc.name || ""), amount: Number(doc.amount || 0), date: String(doc.date || "").slice(0, 10), note: String(doc.note || ""), type: "Expense", reminderDate: "", status: "Paid" };
 }
 function companyExpenseToApiPayload(item: CompanyExpense) {
-  return { name: item.name, amount: item.amount, date: item.date || undefined, note: item.note, type: item.type, reminderDate: item.reminderDate || undefined, status: item.status };
+  return { name: item.name, amount: item.amount, date: item.date || undefined, note: item.note };
+}
+function mapEmiReminderFromApi(doc: Record<string, unknown>): EmiReminder {
+  return { id: String(doc._id), name: String(doc.name || ""), amount: Number(doc.amount || 0), dueDay: Number(doc.dueDay || 1), tenureMonths: Number(doc.tenureMonths || 1), startDate: String(doc.startDate || "").slice(0, 10), note: String(doc.note || ""), status: doc.status === "Closed" ? "Closed" : "Active" };
+}
+function emiReminderToApiPayload(item: EmiReminder) {
+  return { name: item.name, amount: item.amount, dueDay: item.dueDay, tenureMonths: item.tenureMonths, startDate: item.startDate || undefined, note: item.note, status: item.status };
 }
 
 function mapInvoiceFromApi(doc: Record<string, unknown>): Invoice {
@@ -223,7 +229,7 @@ type View =
   | "maintenance" | "documents" | "salary" | "invoices" | "payments" | "reports" | "analytics" | "performance"
   | "notifications" | "settings" | "profile" | "balanceFreight" | "attendance" | "payroll"
   | "liveTracking" | "vehicleHealth" | "billing" | "api" | "users" | "roles" | "company"
-  | "tripReport" | "freightReport" | "companyExpenses";
+  | "tripReport" | "freightReport" | "companyExpenses" | "emiReminders";
 type Status = "Available" | "On Trip" | "Under Maintenance";
 type TripStatus = "Draft" | "Assigned" | "In Transit" | "Completed" | "Cancelled";
 type PaymentStatus = "Paid" | "Partial" | "Pending" | "Overdue";
@@ -288,8 +294,11 @@ type Expense = {
 };
 type CompanyExpense = {
   id: string; name: string; amount: number; date: string; note: string;
+  // Legacy UI fields are retained during this release so existing locally-open
+  // modals do not break. The database model contains company expenses only.
   type: "Expense" | "EMI"; reminderDate: string; status: "Pending" | "Paid";
 };
+type EmiReminder = { id: string; name: string; amount: number; dueDay: number; tenureMonths: number; startDate: string; note: string; status: "Active" | "Closed" };
 type Invoice = {
   id: string; tripId: string; customerId: string; status: PaymentStatus; dueDate: string; paidAt?: string; total?: number; paidAmount?: number;
   invoiceNo?: string; billingDate?: string; additionalCharges?: number; discount?: number; gst?: number; finalAmount?: number; paymentMode?: string; receiptFile?: string;
@@ -390,6 +399,7 @@ const routeByView: Record<View, string> = {
   vehicleHealth: "/maintenance/vehicle-health",
   expenses: "/finance/expenses",
   companyExpenses: "/finance/company-expenses",
+  emiReminders: "/finance/emi-reminders",
   balanceFreight: "/finance/freight",
   freightReport: "/finance/freight/report",
   billing: "/finance/billing",
@@ -672,6 +682,7 @@ const NAV_ITEMS: NavItem[] = [
   { view: "notifications", label: "Alerts", icon: Bell, driver: true, section: "Operations" },
   { view: "expenses", label: "Expenses", icon: Receipt, driver: true, section: "Finance" },
   { view: "companyExpenses", label: "Company Expenses", icon: CreditCard, section: "Finance" },
+  { view: "emiReminders", label: "EMI Reminders", icon: Bell, section: "Finance" },
   { view: "salary", label: "Salary", icon: IndianRupee, section: "Finance" },
   { view: "attendance", label: "Attendance", icon: Calendar, section: "Admin" },
   { view: "reports", label: "Reports", icon: BarChart3, section: "Admin" },
@@ -1101,6 +1112,9 @@ export default function App() {
     apiFetch("/companyExpenses?limit=200", authToken)
       .then((data) => setCompanyExpenses((data.items || []).map(mapCompanyExpenseFromApi)))
       .catch((err) => notify("Could not load company expenses", err instanceof Error ? err.message : "Failed to load company expenses", "alert"));
+    apiFetch("/emiReminders?limit=200", authToken)
+      .then((data) => setEmiReminders((data.items || []).map(mapEmiReminderFromApi)))
+      .catch((err) => notify("Could not load EMI reminders", err instanceof Error ? err.message : "Failed to load EMI reminders", "alert"));
     apiFetch("/invoices?limit=200", authToken)
       .then((data) => setInvoices((data.items || []).map(mapInvoiceFromApi)))
       .catch((err) => notify("Could not load invoices", err instanceof Error ? err.message : "Failed to load invoices", "alert"));
@@ -1139,6 +1153,7 @@ export default function App() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [companyExpenses, setCompanyExpenses] = useState<CompanyExpense[]>([]);
+  const [emiReminders, setEmiReminders] = useState<EmiReminder[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -1147,6 +1162,22 @@ export default function App() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [payroll, setPayroll] = useState<PayrollRecord[]>([]);
   const [notes, setNotes] = useState<Notification[]>([]);
+  useEffect(() => {
+    const now = new Date();
+    const elapsedMonths = (startDate: string) => {
+      const start = new Date(`${startDate}T00:00:00`);
+      return (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth();
+    };
+    const dueNow = emiReminders.filter((item) => {
+      const elapsed = elapsedMonths(item.startDate);
+      const dueDay = Math.min(item.dueDay, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate());
+      return item.status === "Active" && elapsed >= 0 && elapsed < item.tenureMonths && now.getDate() >= dueDay;
+    });
+    setNotes((previous) => [
+      ...previous.filter((note) => note.type !== "emi"),
+      ...dueNow.map((item) => ({ id: `emi-${item.id}-${now.getFullYear()}-${now.getMonth()}`, title: `EMI DUE: ${item.name}`, message: `${rupees(item.amount)} is due on the ${item.dueDay}${item.dueDay === 1 ? "st" : item.dueDay === 2 ? "nd" : item.dueDay === 3 ? "rd" : "th"} of this month.`, type: "emi", read: false, createdAt: today })),
+    ]);
+  }, [emiReminders]);
   const [modal, setModal] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [docPreview, setDocPreview] = useState<ViewableDoc | null>(null);
@@ -1526,6 +1557,12 @@ export default function App() {
         .then(() => notify("Company expense deleted", "The record was removed from the database."))
         .catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Company expense could not be deleted.", "alert"));
     }} exportCsv={exportCsv} />;
+    if (view === "emiReminders") return <EmiReminders records={emiReminders} openModal={openModal} remove={(id) => {
+      setEmiReminders((items) => items.filter((item) => item.id !== id));
+      apiFetch(`/emiReminders/${id}`, authToken, { method: "DELETE" })
+        .then(() => notify("EMI reminder deleted", "The reminder was removed from the database."))
+        .catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "EMI reminder could not be deleted.", "alert"));
+    }} />;
     if (view === "maintenance") return <MaintenanceModule records={maintenancePlan} vehicles={vehicles} trips={trips} openModal={openModal} exportCsv={exportCsv} />;
     if (view === "vehicleHealth") return <VehicleHealth vehicles={vehicles} maintenancePlan={maintenancePlan} expenses={expenses} documents={documents} />;
     if (view === "documents") return <Documents documents={documents} search={search} setSearch={setSearch} exportCsv={exportCsv} sendReminder={(doc) => notify("Document reminder sent", `${doc.ownerName} ${doc.type} expires on ${doc.expiryDate}.`, "document")} onView={setDocPreview} />;
@@ -1632,13 +1669,21 @@ export default function App() {
           .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Party was not saved to the database.", "alert"));
       }} /></Modal>}
       {modal === "trip" && <Modal title={form.id ? "Edit Booking" : "Create Booking"} onClose={() => setModal(null)}><TripForm form={form} setForm={setForm} customers={customers} vehicles={vehicles} onSave={saveTrip} /></Modal>}
-      {modal === "companyExpense" && <Modal title="Add Company Expense / EMI" onClose={() => setModal(null)}><CompanyExpenseForm form={form} setForm={setForm} onSave={() => {
-        const item: CompanyExpense = { id: uid("company-exp"), name: form.name || "Company expense", amount: Number(form.amount || 0), date: form.date || today, note: form.note || "", type: form.type === "EMI" ? "EMI" : "Expense", reminderDate: form.reminderDate || "", status: form.status === "Paid" ? "Paid" : "Pending" };
+      {modal === "companyExpense" && <Modal title="Add Company Expense" onClose={() => setModal(null)}><CompanyExpenseForm form={form} setForm={setForm} onSave={() => {
+        const item: CompanyExpense = { id: uid("company-exp"), name: form.name || "Company expense", amount: Number(form.amount || 0), date: form.date || today, note: form.note || "", type: "Expense", reminderDate: "", status: "Paid" };
         setCompanyExpenses((items) => [item, ...items]);
         setModal(null);
         apiFetch("/companyExpenses", authToken, { method: "POST", body: JSON.stringify(companyExpenseToApiPayload(item)) })
-          .then((doc) => { setCompanyExpenses((items) => items.map((entry) => entry.id === item.id ? mapCompanyExpenseFromApi(doc) : entry)); notify(item.type === "EMI" ? "EMI reminder saved" : "Company expense saved", "Saved permanently to the database."); })
+          .then((doc) => { setCompanyExpenses((items) => items.map((entry) => entry.id === item.id ? mapCompanyExpenseFromApi(doc) : entry)); notify("Company expense saved", "Saved permanently to the database."); })
           .catch((err) => { setCompanyExpenses((items) => items.filter((entry) => entry.id !== item.id)); notify("Cloud save failed", err instanceof Error ? err.message : "Company expense was not saved to the database.", "alert"); });
+      }} /></Modal>}
+      {modal === "emiReminder" && <Modal title="Add EMI Reminder" onClose={() => setModal(null)}><EmiReminderForm form={form} setForm={setForm} onSave={() => {
+        const item: EmiReminder = { id: uid("emi"), name: form.name || "EMI", amount: Number(form.amount || 0), dueDay: Math.min(31, Math.max(1, Number(form.dueDay || 1))), tenureMonths: Math.max(1, Number(form.tenureMonths || 1)), startDate: form.startDate || today, note: form.note || "", status: "Active" };
+        setEmiReminders((items) => [item, ...items]);
+        setModal(null);
+        apiFetch("/emiReminders", authToken, { method: "POST", body: JSON.stringify(emiReminderToApiPayload(item)) })
+          .then((doc) => { setEmiReminders((items) => items.map((entry) => entry.id === item.id ? mapEmiReminderFromApi(doc) : entry)); notify("EMI reminder saved", `You will see a bold reminder every month on day ${item.dueDay}.`, "emi"); })
+          .catch((err) => { setEmiReminders((items) => items.filter((entry) => entry.id !== item.id)); notify("Cloud save failed", err instanceof Error ? err.message : "EMI reminder was not saved to the database.", "alert"); });
       }} /></Modal>}
       {modal === "expense" && <Modal title="Add Expense" onClose={() => setModal(null)}><ExpenseForm form={form} setForm={setForm} trips={trips} vehicles={vehicles} onSave={() => {
         const category = form.category === "Custom" ? (form.customCategory || "Custom expense").trim() : (form.category || "Other");
@@ -2166,7 +2211,7 @@ function Trips({ trips, customers, vehicles, drivers, role, search, setSearch, o
   </div>;
 }
 
-function CompanyExpenses({ records, openModal, remove, exportCsv }: { records: CompanyExpense[]; openModal: (m: string, f?: Record<string, string>) => void; remove: (id: string) => void; exportCsv: (n: string, rows: Record<string, string | number>[]) => void }) {
+function LegacyCompanyExpenses({ records, openModal, remove, exportCsv }: { records: CompanyExpense[]; openModal: (m: string, f?: Record<string, string>) => void; remove: (id: string) => void; exportCsv: (n: string, rows: Record<string, string | number>[]) => void }) {
   const [filter, setFilter] = useState<"All" | "Expense" | "EMI">("All");
   const visible = records.filter((record) => filter === "All" || record.type === filter).sort((a, b) => `${b.reminderDate || b.date}`.localeCompare(`${a.reminderDate || a.date}`));
   const emiDue = records.filter((record) => record.type === "EMI" && record.status === "Pending").sort((a, b) => (a.reminderDate || a.date).localeCompare(b.reminderDate || b.date));
@@ -2175,6 +2220,26 @@ function CompanyExpenses({ records, openModal, remove, exportCsv }: { records: C
     <div className="grid md:grid-cols-3 gap-4 mb-5"><Metric title="Total company expenses" value={rupees(records.filter((record) => record.type === "Expense").reduce((sum, record) => sum + record.amount, 0))} /><Metric title="Pending EMIs" value={String(emiDue.length)} /><Metric title="EMI due amount" value={rupees(emiDue.reduce((sum, record) => sum + record.amount, 0))} /></div>
     <div className="rounded-2xl p-5 mb-5" style={glass}><div className="flex items-center justify-between gap-3"><div><h3 className="font-bold">EMI reminders</h3><p className="text-sm text-[#8A94A6]">Keep upcoming instalments separate from normal company expenses.</p></div><button onClick={() => openModal("companyExpense", { type: "EMI", date: today, reminderDate: today, status: "Pending" })} className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-[#12151C]">+ Add EMI reminder</button></div>{emiDue.length ? <div className="mt-4 space-y-2">{emiDue.map((record) => <Row key={record.id}><CreditCard size={17} /><div className="flex-1"><p className="font-semibold text-sm">{record.name}</p><p className="text-xs text-[#8A94A6]">Due {record.reminderDate || record.date}{record.note ? ` · ${record.note}` : ""}</p></div><p className="font-bold text-sm">{rupees(record.amount)}</p><Badge label="Pending" /></Row>)}</div> : <p className="mt-4 text-sm text-[#8A94A6]">No pending EMI reminders.</p>}</div>
     <DataCard>{visible.length ? visible.map((record) => <Row key={record.id}><Receipt size={18} /><div className="flex-1"><p className="text-sm font-semibold">{record.name}</p><p className="text-xs text-[#8A94A6]">{record.type}{record.note ? ` · ${record.note}` : ""}</p></div><p className="text-xs">{record.type === "EMI" ? `Reminder: ${record.reminderDate || record.date}` : record.date}</p><p className="font-bold text-sm">{rupees(record.amount)}</p><Badge label={record.status} /><button onClick={() => { if (window.confirm(`Delete ${record.name}?`)) remove(record.id); }} className="p-2 rounded-xl text-red-600" title="Delete record"><Trash2 size={16} /></button></Row>) : <EmptyState label="No company expenses or EMI reminders yet" />}</DataCard>
+  </div>;
+}
+
+function CompanyExpenses({ records, openModal, remove, exportCsv }: { records: CompanyExpense[]; openModal: (m: string, f?: Record<string, string>) => void; remove: (id: string) => void; exportCsv: (n: string, rows: Record<string, string | number>[]) => void }) {
+  const sorted = [...records].sort((a, b) => b.date.localeCompare(a.date));
+  return <div><Toolbar title="Company Expenses" subtitle={`${sorted.length} records · ${rupees(sorted.reduce((sum, record) => sum + record.amount, 0))}`} action={<><button onClick={() => exportCsv("company-expenses", sorted.map((record) => ({ name: record.name, amount: record.amount, date: record.date, note: record.note })))} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Download size={15} />Export</button><button onClick={() => openModal("companyExpense", { date: today })} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add Company Expense</button></>} />
+    <div className="grid md:grid-cols-2 gap-4 mb-5"><Metric title="Total company expenses" value={rupees(sorted.reduce((sum, record) => sum + record.amount, 0))} /><Metric title="Saved records" value={String(sorted.length)} /></div>
+    <DataCard>{sorted.length ? sorted.map((record) => <Row key={record.id}><Receipt size={18} /><div className="flex-1"><p className="text-sm font-semibold">{record.name}</p><p className="text-xs text-[#9CA3AF]">{record.note || "Company expense"}</p></div><p className="text-xs">{record.date}</p><p className="font-bold text-sm">{rupees(record.amount)}</p><button onClick={() => { if (window.confirm(`Delete ${record.name}?`)) remove(record.id); }} className="p-2 rounded-xl text-red-600" title="Delete record"><Trash2 size={16} /></button></Row>) : <EmptyState label="No company expenses saved yet" />}</DataCard>
+  </div>;
+}
+
+function EmiReminders({ records, openModal, remove }: { records: EmiReminder[]; openModal: (m: string, f?: Record<string, string>) => void; remove: (id: string) => void }) {
+  const now = new Date();
+  const monthOffset = (startDate: string) => { const start = new Date(`${startDate}T00:00:00`); return (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth(); };
+  const isCurrent = (record: EmiReminder) => { const offset = monthOffset(record.startDate); return record.status === "Active" && offset >= 0 && offset < record.tenureMonths; };
+  const current = records.filter(isCurrent).sort((a, b) => a.dueDay - b.dueDay);
+  return <div><Toolbar title="EMI Reminders" subtitle={`${current.length} active monthly EMI reminders`} action={<button onClick={() => openModal("emiReminder", { dueDay: "1", tenureMonths: "12", startDate: today })} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add EMI Reminder</button>} />
+    <div className="rounded-2xl p-5 mb-5 border-2 border-red-400 bg-red-50"><p className="text-lg font-extrabold text-red-800">⚠ Monthly EMI alerts</p><p className="text-sm font-semibold text-red-700 mt-1">EMI due reminders are shown prominently in Alerts on the selected date, for every month of the selected tenure.</p></div>
+    <div className="grid md:grid-cols-3 gap-4 mb-5"><Metric title="Active EMIs" value={String(current.length)} /><Metric title="Monthly commitment" value={rupees(current.reduce((sum, record) => sum + record.amount, 0))} /><Metric title="Next due day" value={current[0] ? `${current[0].dueDay} of month` : "-"} /></div>
+    <DataCard>{records.length ? records.map((record) => { const elapsed = Math.max(0, monthOffset(record.startDate)); const remaining = Math.max(0, record.tenureMonths - elapsed); const dueTodayOrPast = isCurrent(record) && now.getDate() >= record.dueDay; return <Row key={record.id}><Bell size={18} className={dueTodayOrPast ? "text-red-600" : "text-amber-500"} /><div className="flex-1"><p className={dueTodayOrPast ? "text-sm font-extrabold text-red-700" : "text-sm font-semibold"}>{record.name}</p><p className="text-xs text-[#8A94A6]">Every month on day {record.dueDay} · {remaining} of {record.tenureMonths} months remaining{record.note ? ` · ${record.note}` : ""}</p></div><p className="font-bold text-sm">{rupees(record.amount)}</p><Badge label={record.status} /><button onClick={() => { if (window.confirm(`Delete ${record.name}?`)) remove(record.id); }} className="p-2 rounded-xl text-red-600" title="Delete EMI reminder"><Trash2 size={16} /></button></Row>; }) : <EmptyState label="No EMI reminders saved yet" />}</DataCard>
   </div>;
 }
 
@@ -2442,7 +2507,7 @@ function DriverPerformance({ drivers, trips, expenses, payroll }: { drivers: Dri
   return <div><Toolbar title="Driver Score" subtitle="Scorecard, leaderboard, bonus paid, revenue, fuel efficiency and attendance" /><div className="grid md:grid-cols-4 gap-4 mb-4"><Metric title="Top Driver" value={rows[0]?.driver.name ?? "-"} /><Metric title="Best Score" value={`${rows[0]?.score ?? 0}/100`} /><Metric title="Bonus Paid" value={rupees(rows.reduce((s, r) => s + r.bonusPaid, 0))} /><Metric title="Needs Improvement" value={rows.filter((r) => r.score < 70).map((r) => r.driver.name).join(", ") || "None"} /></div><DataCard>{rows.map((r, index) => <Row key={r.driver.id}><Avatar text={String(index + 1)} /><div className="flex-1"><p className="text-sm font-semibold">{r.driver.name}</p><p className="text-xs text-[#9CA3AF]">{r.completed} trips - {r.distance} km - {rupees(r.revenue)} revenue</p></div><p className="hidden md:block text-xs">{r.mileage.toFixed(1)} km/L</p><p className="hidden lg:block text-xs">{r.attendance} working - {r.leave} leave</p><p className="hidden xl:block text-xs">Bonus {rupees(r.bonusPaid)} - Advance {rupees(r.advance)}</p><p className="text-xl font-extrabold">{r.score}</p><Badge label={r.score >= 80 ? "Top Driver" : r.score < 70 ? "Needs Improvement" : "Average"} /></Row>)}</DataCard></div>;
 }
 function Notifications({ notes, setNotes }: { notes: Notification[]; setNotes: React.Dispatch<React.SetStateAction<Notification[]>> }) {
-  return <div><Toolbar title="Notifications" subtitle={`${notes.filter((n) => !n.read).length} unread reminders and alerts`} action={<button onClick={() => setNotes((n) => n.map((x) => ({ ...x, read: true })))} className="px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}>Mark all read</button>} /><DataCard>{notes.map((n) => <Row key={n.id}><Bell size={18} className={n.read ? "text-[#9CA3AF]" : "text-blue-600"} /><div className="flex-1"><p className="text-sm font-semibold">{n.title}</p><p className="text-xs text-[#9CA3AF]">{n.message}</p></div><Badge label={n.type} /><button onClick={() => setNotes((prev) => prev.map((x) => x.id === n.id ? { ...x, read: true } : x))} className="px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}>Read</button></Row>)}</DataCard></div>;
+  return <div><Toolbar title="Notifications" subtitle={`${notes.filter((n) => !n.read).length} unread reminders and alerts`} action={<button onClick={() => setNotes((n) => n.map((x) => ({ ...x, read: true })))} className="px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}>Mark all read</button>} /><DataCard>{notes.map((n) => { const isEmi = n.type === "emi"; return <Row key={n.id}><Bell size={18} className={isEmi ? "text-red-600" : n.read ? "text-[#9CA3AF]" : "text-blue-600"} /><div className={`flex-1 ${isEmi ? "rounded-xl border-2 border-red-400 bg-red-50 px-3 py-2" : ""}`}><p className={isEmi ? "text-sm font-extrabold text-red-700" : "text-sm font-semibold"}>{n.title}</p><p className={isEmi ? "text-xs font-bold text-red-600" : "text-xs text-[#9CA3AF]"}>{n.message}</p></div><Badge label={isEmi ? "EMI DUE" : n.type} /><button onClick={() => setNotes((prev) => prev.map((x) => x.id === n.id ? { ...x, read: true } : x))} className="px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}>Read</button></Row>; })}</DataCard></div>;
 }
 function Settings({ role, setRole, profileName, setProfileName }: { role: Role; setRole: (r: Role) => void; profileName: string; setProfileName: (v: string) => void }) { return <div><Toolbar title="Settings & Profile" subtitle="Role-based access, company profile, reminders and notification preferences" /><div className="grid md:grid-cols-2 gap-4"><div className="rounded-2xl p-6" style={glass}><h3 className="font-bold mb-4">User Profile</h3><Field label="Name" value={profileName} onChange={setProfileName} /><SelectField label="Role" value={role} onChange={(v) => setRole(v as Role)} options={[{ value: "admin", label: "Admin / Manager" }, { value: "driver", label: "Driver" }]} /></div><div className="rounded-2xl p-6" style={glass}><h3 className="font-bold mb-4">Reminder Rules</h3>{["Insurance 30 days before expiry", "License 30 days before expiry", "Payment due and overdue alerts", "Maintenance schedule alerts"].map((x) => <label key={x} className="flex items-center gap-3 py-2 text-sm"><input type="checkbox" defaultChecked />{x}</label>)}</div></div></div>; }
 
@@ -2782,15 +2847,25 @@ function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record
 
 function CompanyExpenseForm({ form, setForm, onSave }: { form: Record<string, string>; setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>; onSave: () => void }) {
   const set = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }));
-  const isEmi = form.type === "EMI";
   return <>
-    <SelectField label="Record Type" value={form.type || "Expense"} onChange={(value) => set("type", value)} options={[{ value: "Expense", label: "Company Expense" }, { value: "EMI", label: "EMI Reminder" }]} />
-    <Field label={isEmi ? "EMI / Loan Name" : "Expense Name"} value={form.name || ""} onChange={(value) => set("name", value)} />
+    <Field label="Expense Name" value={form.name || ""} onChange={(value) => set("name", value)} />
     <Field label="Amount" type="number" value={form.amount || ""} onChange={(value) => set("amount", value)} />
     <Field label="Expense Date" type="date" value={form.date || today} onChange={(value) => set("date", value)} />
-    {isEmi && <Field label="EMI Reminder Date" type="date" value={form.reminderDate || form.date || today} onChange={(value) => set("reminderDate", value)} />}
-    <SelectField label="Status" value={form.status || "Pending"} onChange={(value) => set("status", value)} options={[{ value: "Pending", label: "Pending" }, { value: "Paid", label: "Paid" }]} />
     <Field label="Note" value={form.note || ""} onChange={(value) => set("note", value)} />
+    <Save onClick={onSave} />
+  </>;
+}
+
+function EmiReminderForm({ form, setForm, onSave }: { form: Record<string, string>; setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>; onSave: () => void }) {
+  const set = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  return <>
+    <Field label="EMI / Loan Name" value={form.name || ""} onChange={(value) => set("name", value)} />
+    <Field label="Monthly EMI Amount" type="number" value={form.amount || ""} onChange={(value) => set("amount", value)} />
+    <Field label="Monthly Reminder Day (1–31)" type="number" value={form.dueDay || ""} onChange={(value) => set("dueDay", value)} />
+    <Field label="Tenure (months)" type="number" value={form.tenureMonths || ""} onChange={(value) => set("tenureMonths", value)} />
+    <Field label="Starts From" type="date" value={form.startDate || today} onChange={(value) => set("startDate", value)} />
+    <Field label="Note" value={form.note || ""} onChange={(value) => set("note", value)} />
+    <div className="rounded-2xl p-4 text-sm font-bold border-2 border-amber-300 bg-amber-50 text-amber-900">A bold EMI alert will appear every month on the selected day until the tenure ends.</div>
     <Save onClick={onSave} />
   </>;
 }
