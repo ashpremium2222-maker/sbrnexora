@@ -1274,35 +1274,26 @@ export default function App() {
   function saveTrip(files: UploadedFile[]) {
     const podUrls = files.map((file) => file.dataUrl).filter(Boolean);
     if (form.id) {
-      setTrips((prev) => prev.map((t) => t.id !== form.id ? t : {
-        ...t,
-        customerId: form.customerId || t.customerId,
-        vehicleId: form.vehicleId || t.vehicleId,
-        pickup: form.pickup ?? t.pickup,
-        drop: form.drop ?? t.drop,
-        cargo: form.cargo ?? t.cargo,
-        size: form.size ?? t.size,
-        billNo: form.billNo ?? t.billNo,
-        chNo: form.chNo ?? t.chNo,
-        receivedDate: form.receivedDate ?? t.receivedDate,
-        date: form.date || t.date,
-        freight: Number(form.freight || 0),
-        advanceAmount: Number(form.advanceAmount || 0),
-        otherExpenses: Number(form.otherCharges || 0),
-        otherChargesReason: form.otherChargesReason ?? t.otherChargesReason,
-        expenseRemarks: form.tripExpenseRemarksJson !== undefined ? parseTripExpenseRemarks(form.tripExpenseRemarksJson) : (t.expenseRemarks ?? []),
-        invoiceNumber: form.invoiceNumber ?? t.invoiceNumber,
-        paymentStatus: (form.paymentStatus || t.paymentStatus || "Pending") as PaymentStatus,
-        ewayBill: form.ewayBill ?? t.ewayBill,
-        deliveryReceipt: form.deliveryReceipt ?? t.deliveryReceipt,
-        remarks: form.remarks ?? t.remarks,
-        podDocs: podUrls.length ? [...t.podDocs, ...podUrls] : t.podDocs,
-      }));
+      const existing = trips.find((trip) => trip.id === form.id);
+      if (!existing) return;
+      const updatedTrip: Trip = {
+        ...existing,
+        customerId: form.customerId || existing.customerId, vehicleId: form.vehicleId || existing.vehicleId,
+        pickup: form.pickup ?? existing.pickup, drop: form.drop ?? existing.drop, cargo: form.cargo ?? existing.cargo,
+        size: form.size ?? existing.size, billNo: form.billNo ?? existing.billNo, chNo: form.chNo ?? existing.chNo,
+        receivedDate: form.receivedDate ?? existing.receivedDate, date: form.date || existing.date,
+        freight: Number(form.freight || 0), advanceAmount: Number(form.advanceAmount || 0), otherExpenses: Number(form.otherCharges || 0),
+        otherChargesReason: form.otherChargesReason ?? existing.otherChargesReason,
+        expenseRemarks: form.tripExpenseRemarksJson !== undefined ? parseTripExpenseRemarks(form.tripExpenseRemarksJson) : (existing.expenseRemarks ?? []),
+        invoiceNumber: form.invoiceNumber ?? existing.invoiceNumber, paymentStatus: (form.paymentStatus || existing.paymentStatus || "Pending") as PaymentStatus,
+        ewayBill: form.ewayBill ?? existing.ewayBill, deliveryReceipt: form.deliveryReceipt ?? existing.deliveryReceipt,
+        remarks: form.remarks ?? existing.remarks, podDocs: podUrls.length ? [...existing.podDocs, ...podUrls] : existing.podDocs,
+      };
+      setTrips((prev) => prev.map((trip) => trip.id === form.id ? updatedTrip : trip));
       notify("Booking updated", `${form.id} details saved.`, "trip");
       setModal(null);
       if (isMongoId(form.id)) {
-        const updated = trips.find((t) => t.id === form.id);
-        if (updated) apiFetch(`/trips/${form.id}`, authToken, { method: "PATCH", body: JSON.stringify(tripToApiPayload({ ...updated, podDocs: podUrls.length ? [...updated.podDocs, ...podUrls] : updated.podDocs })) }).catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Booking update was not saved.", "alert"));
+        apiFetch(`/trips/${form.id}`, authToken, { method: "PATCH", body: JSON.stringify(tripToApiPayload(updatedTrip)) }).catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Booking update was not saved.", "alert"));
       }
       return;
     }
