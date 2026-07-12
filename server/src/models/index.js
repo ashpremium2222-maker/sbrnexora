@@ -161,6 +161,18 @@ export const Expense = mongoose.model("Expense", new mongoose.Schema({
   document: documentSchema,
 }, { timestamps: true }));
 
+// Company overhead is deliberately kept separate from trip/fleet expenses.
+// This makes rent, office costs and loan EMIs visible without altering trip profit.
+export const CompanyExpense = mongoose.model("CompanyExpense", new mongoose.Schema({
+  name: { type: String, required: true, trim: true },
+  amount: { type: Number, required: true, min: 0 },
+  date: { type: Date, required: true },
+  note: { type: String, default: "" },
+  type: { type: String, enum: ["Expense", "EMI"], default: "Expense" },
+  reminderDate: Date,
+  status: { type: String, enum: ["Pending", "Paid"], default: "Pending" },
+}, { timestamps: true }));
+
 export const Invoice = mongoose.model("Invoice", new mongoose.Schema({
   invoiceNo: { type: String, required: true, unique: true },
   trip: { type: mongoose.Schema.Types.ObjectId, ref: "Trip", required: true },

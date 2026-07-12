@@ -157,6 +157,13 @@ function expenseToApiPayload(item: Expense) {
   return { trip: isMongoId(item.tripId) ? item.tripId : undefined, vehicle: isMongoId(item.vehicleId) ? item.vehicleId : undefined, driver: isMongoId(item.driverId) ? item.driverId : undefined, category: item.category, amount: item.amount, date: item.date || undefined, note: item.note, liters: item.liters ?? 0, mileage: item.mileage ?? 0 };
 }
 
+function mapCompanyExpenseFromApi(doc: Record<string, unknown>): CompanyExpense {
+  return { id: String(doc._id), name: String(doc.name || ""), amount: Number(doc.amount || 0), date: String(doc.date || "").slice(0, 10), note: String(doc.note || ""), type: doc.type === "EMI" ? "EMI" : "Expense", reminderDate: doc.reminderDate ? String(doc.reminderDate).slice(0, 10) : "", status: doc.status === "Paid" ? "Paid" : "Pending" };
+}
+function companyExpenseToApiPayload(item: CompanyExpense) {
+  return { name: item.name, amount: item.amount, date: item.date || undefined, note: item.note, type: item.type, reminderDate: item.reminderDate || undefined, status: item.status };
+}
+
 function mapInvoiceFromApi(doc: Record<string, unknown>): Invoice {
   return { id: String(doc._id), tripId: String((doc.trip as Record<string, unknown>)?._id ?? doc.trip ?? ""), customerId: String((doc.customer as Record<string, unknown>)?._id ?? doc.customer ?? ""), status: (doc.status as PaymentStatus) || "Pending", dueDate: doc.dueDate ? String(doc.dueDate).slice(0, 10) : "", paidAt: doc.paidAt ? String(doc.paidAt).slice(0, 10) : undefined, total: Number(doc.total || 0), paidAmount: Number(doc.paidAmount || 0), invoiceNo: doc.invoiceNo ? String(doc.invoiceNo) : undefined, billingDate: doc.billingDate ? String(doc.billingDate).slice(0, 10) : undefined, additionalCharges: Number(doc.additionalCharges || 0), discount: Number(doc.discount || 0), gst: Number(doc.gstAmount || 0), finalAmount: Number(doc.total || 0), paymentMode: doc.paymentMode ? String(doc.paymentMode) : undefined };
 }
@@ -216,7 +223,7 @@ type View =
   | "maintenance" | "documents" | "salary" | "invoices" | "payments" | "reports" | "analytics" | "performance"
   | "notifications" | "settings" | "profile" | "balanceFreight" | "attendance" | "payroll"
   | "liveTracking" | "vehicleHealth" | "billing" | "api" | "users" | "roles" | "company"
-  | "tripReport" | "freightReport";
+  | "tripReport" | "freightReport" | "companyExpenses";
 type Status = "Available" | "On Trip" | "Under Maintenance";
 type TripStatus = "Draft" | "Assigned" | "In Transit" | "Completed" | "Cancelled";
 type PaymentStatus = "Paid" | "Partial" | "Pending" | "Overdue";
@@ -278,6 +285,10 @@ type StopEvent = { location: string; start: string; end: string | null; ticks: n
 type Expense = {
   id: string; tripId?: string; category: string;
   amount: number; date: string; note: string; vehicleId?: string; driverId?: string; liters?: number; mileage?: number;
+};
+type CompanyExpense = {
+  id: string; name: string; amount: number; date: string; note: string;
+  type: "Expense" | "EMI"; reminderDate: string; status: "Pending" | "Paid";
 };
 type Invoice = {
   id: string; tripId: string; customerId: string; status: PaymentStatus; dueDate: string; paidAt?: string; total?: number; paidAmount?: number;
@@ -378,6 +389,7 @@ const routeByView: Record<View, string> = {
   fuel: "/maintenance/fuel",
   vehicleHealth: "/maintenance/vehicle-health",
   expenses: "/finance/expenses",
+  companyExpenses: "/finance/company-expenses",
   balanceFreight: "/finance/freight",
   freightReport: "/finance/freight/report",
   billing: "/finance/billing",
@@ -659,6 +671,7 @@ const NAV_ITEMS: NavItem[] = [
   { view: "documents", label: "Documents", icon: ShieldCheck, section: "Operations" },
   { view: "notifications", label: "Alerts", icon: Bell, driver: true, section: "Operations" },
   { view: "expenses", label: "Expenses", icon: Receipt, driver: true, section: "Finance" },
+  { view: "companyExpenses", label: "Company Expenses", icon: CreditCard, section: "Finance" },
   { view: "salary", label: "Salary", icon: IndianRupee, section: "Finance" },
   { view: "attendance", label: "Attendance", icon: Calendar, section: "Admin" },
   { view: "reports", label: "Reports", icon: BarChart3, section: "Admin" },
@@ -1085,6 +1098,9 @@ export default function App() {
     apiFetch("/expenses?limit=200", authToken)
       .then((data) => setExpenses((data.items || []).map(mapExpenseFromApi)))
       .catch((err) => notify("Could not load expenses", err instanceof Error ? err.message : "Failed to load expenses", "alert"));
+    apiFetch("/companyExpenses?limit=200", authToken)
+      .then((data) => setCompanyExpenses((data.items || []).map(mapCompanyExpenseFromApi)))
+      .catch((err) => notify("Could not load company expenses", err instanceof Error ? err.message : "Failed to load company expenses", "alert"));
     apiFetch("/invoices?limit=200", authToken)
       .then((data) => setInvoices((data.items || []).map(mapInvoiceFromApi)))
       .catch((err) => notify("Could not load invoices", err instanceof Error ? err.message : "Failed to load invoices", "alert"));
@@ -1122,6 +1138,7 @@ export default function App() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [companyExpenses, setCompanyExpenses] = useState<CompanyExpense[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
@@ -1503,6 +1520,12 @@ export default function App() {
     if (view === "customers") return <CustomersWithDelete customers={customers} trips={trips} search={search} setSearch={setSearch} openModal={openModal} remove={deleteCustomer} />;
     if (view === "trips") return <TripsWithView trips={trips} customers={customers} vehicles={vehicles} drivers={drivers} role={role} search={search} setSearch={setSearch} openModal={openModal} updateTripStatus={updateTripStatus} setView={setView} exportCsv={exportCsv} onBill={setBillTripId} edit={(t) => openModal("trip", { ...Object.fromEntries(Object.entries(t).filter(([k]) => k !== "podDocs" && k !== "expenseRemarks").map(([k, v]) => [k, String(v ?? "")])), tripExpenseRemarksJson: JSON.stringify(t.expenseRemarks ?? []) })} remove={deleteTrip} onPodUpload={handlePodUpload} onView={setDocPreview} />;
     if (view === "expenses" || view === "fuel") return <Expenses view={view} expenses={expenses} trips={trips} vehicles={vehicles} drivers={drivers} openModal={openModal} exportCsv={exportCsv} />;
+    if (view === "companyExpenses") return <CompanyExpenses records={companyExpenses} openModal={openModal} remove={(id) => {
+      setCompanyExpenses((items) => items.filter((item) => item.id !== id));
+      apiFetch(`/companyExpenses/${id}`, authToken, { method: "DELETE" })
+        .then(() => notify("Company expense deleted", "The record was removed from the database."))
+        .catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Company expense could not be deleted.", "alert"));
+    }} exportCsv={exportCsv} />;
     if (view === "maintenance") return <MaintenanceModule records={maintenancePlan} vehicles={vehicles} trips={trips} openModal={openModal} exportCsv={exportCsv} />;
     if (view === "vehicleHealth") return <VehicleHealth vehicles={vehicles} maintenancePlan={maintenancePlan} expenses={expenses} documents={documents} />;
     if (view === "documents") return <Documents documents={documents} search={search} setSearch={setSearch} exportCsv={exportCsv} sendReminder={(doc) => notify("Document reminder sent", `${doc.ownerName} ${doc.type} expires on ${doc.expiryDate}.`, "document")} onView={setDocPreview} />;
@@ -1609,6 +1632,14 @@ export default function App() {
           .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Party was not saved to the database.", "alert"));
       }} /></Modal>}
       {modal === "trip" && <Modal title={form.id ? "Edit Booking" : "Create Booking"} onClose={() => setModal(null)}><TripForm form={form} setForm={setForm} customers={customers} vehicles={vehicles} onSave={saveTrip} /></Modal>}
+      {modal === "companyExpense" && <Modal title="Add Company Expense / EMI" onClose={() => setModal(null)}><CompanyExpenseForm form={form} setForm={setForm} onSave={() => {
+        const item: CompanyExpense = { id: uid("company-exp"), name: form.name || "Company expense", amount: Number(form.amount || 0), date: form.date || today, note: form.note || "", type: form.type === "EMI" ? "EMI" : "Expense", reminderDate: form.reminderDate || "", status: form.status === "Paid" ? "Paid" : "Pending" };
+        setCompanyExpenses((items) => [item, ...items]);
+        setModal(null);
+        apiFetch("/companyExpenses", authToken, { method: "POST", body: JSON.stringify(companyExpenseToApiPayload(item)) })
+          .then((doc) => { setCompanyExpenses((items) => items.map((entry) => entry.id === item.id ? mapCompanyExpenseFromApi(doc) : entry)); notify(item.type === "EMI" ? "EMI reminder saved" : "Company expense saved", "Saved permanently to the database."); })
+          .catch((err) => { setCompanyExpenses((items) => items.filter((entry) => entry.id !== item.id)); notify("Cloud save failed", err instanceof Error ? err.message : "Company expense was not saved to the database.", "alert"); });
+      }} /></Modal>}
       {modal === "expense" && <Modal title="Add Expense" onClose={() => setModal(null)}><ExpenseForm form={form} setForm={setForm} trips={trips} vehicles={vehicles} onSave={() => {
         const category = form.category === "Custom" ? (form.customCategory || "Custom expense").trim() : (form.category || "Other");
         const liters = form.liters ? Number(form.liters) : undefined;
@@ -2134,6 +2165,19 @@ function Trips({ trips, customers, vehicles, drivers, role, search, setSearch, o
     <div className="space-y-5">{groupedByDay.length ? groupedByDay.map(([date, rows]) => <div key={date}><div className="flex items-center justify-between mb-2 px-1"><h4 className="text-sm font-extrabold text-[#52708D]">{date}{date === currentDay ? <span className="ml-2 text-[10px] font-bold text-emerald-600 bg-emerald-100 rounded-full px-2 py-0.5">Today</span> : null}</h4><p className="text-xs font-bold text-[#8A94A6]">{rupees(rows.reduce((s, e) => s + e.amount, 0))}</p></div><DataCard>{rows.map((e) => <Row key={e.id}><Receipt size={18} /><div className="flex-1"><p className="text-sm font-semibold">{e.category}{e.category === "Fuel" && (e.mileage ?? 0) < 4 ? <span className="ml-2 text-[10px] text-red-600 font-bold">ABNORMAL</span> : null}</p><p className="text-xs text-[#9CA3AF]">{e.note || e.tripId || "General"}</p></div><p className="hidden md:block text-xs">{vehicles.find((v) => v.id === e.vehicleId)?.number ?? trips.find((t) => t.id === e.tripId)?.id ?? "-"}</p><p className="hidden lg:block text-xs">{drivers.find((d) => d.id === e.driverId)?.name ?? "-"}</p><p className="text-xs">{e.date}</p><p className="text-sm font-bold">{rupees(e.amount)}</p></Row>)}</DataCard></div>) : <EmptyState label="No entries match this filter" />}</div>
   </div>;
 }
+
+function CompanyExpenses({ records, openModal, remove, exportCsv }: { records: CompanyExpense[]; openModal: (m: string, f?: Record<string, string>) => void; remove: (id: string) => void; exportCsv: (n: string, rows: Record<string, string | number>[]) => void }) {
+  const [filter, setFilter] = useState<"All" | "Expense" | "EMI">("All");
+  const visible = records.filter((record) => filter === "All" || record.type === filter).sort((a, b) => `${b.reminderDate || b.date}`.localeCompare(`${a.reminderDate || a.date}`));
+  const emiDue = records.filter((record) => record.type === "EMI" && record.status === "Pending").sort((a, b) => (a.reminderDate || a.date).localeCompare(b.reminderDate || b.date));
+  const total = visible.reduce((sum, record) => sum + record.amount, 0);
+  return <div><Toolbar title="Company Expenses" subtitle={`${visible.length} records · ${rupees(total)}`} filters={<select value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle}><option value="All">All records</option><option value="Expense">Company expenses</option><option value="EMI">EMI reminders</option></select>} action={<><button onClick={() => exportCsv("company-expenses", visible.map((record) => ({ name: record.name, type: record.type, amount: record.amount, date: record.date, reminderDate: record.reminderDate, status: record.status, note: record.note })))} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Download size={15} />Export</button><button onClick={() => openModal("companyExpense", { type: "Expense", date: today, status: "Pending" })} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add Company Expense</button></>} />
+    <div className="grid md:grid-cols-3 gap-4 mb-5"><Metric title="Total company expenses" value={rupees(records.filter((record) => record.type === "Expense").reduce((sum, record) => sum + record.amount, 0))} /><Metric title="Pending EMIs" value={String(emiDue.length)} /><Metric title="EMI due amount" value={rupees(emiDue.reduce((sum, record) => sum + record.amount, 0))} /></div>
+    <div className="rounded-2xl p-5 mb-5" style={glass}><div className="flex items-center justify-between gap-3"><div><h3 className="font-bold">EMI reminders</h3><p className="text-sm text-[#8A94A6]">Keep upcoming instalments separate from normal company expenses.</p></div><button onClick={() => openModal("companyExpense", { type: "EMI", date: today, reminderDate: today, status: "Pending" })} className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-[#12151C]">+ Add EMI reminder</button></div>{emiDue.length ? <div className="mt-4 space-y-2">{emiDue.map((record) => <Row key={record.id}><CreditCard size={17} /><div className="flex-1"><p className="font-semibold text-sm">{record.name}</p><p className="text-xs text-[#8A94A6]">Due {record.reminderDate || record.date}{record.note ? ` · ${record.note}` : ""}</p></div><p className="font-bold text-sm">{rupees(record.amount)}</p><Badge label="Pending" /></Row>)}</div> : <p className="mt-4 text-sm text-[#8A94A6]">No pending EMI reminders.</p>}</div>
+    <DataCard>{visible.length ? visible.map((record) => <Row key={record.id}><Receipt size={18} /><div className="flex-1"><p className="text-sm font-semibold">{record.name}</p><p className="text-xs text-[#8A94A6]">{record.type}{record.note ? ` · ${record.note}` : ""}</p></div><p className="text-xs">{record.type === "EMI" ? `Reminder: ${record.reminderDate || record.date}` : record.date}</p><p className="font-bold text-sm">{rupees(record.amount)}</p><Badge label={record.status} /><button onClick={() => { if (window.confirm(`Delete ${record.name}?`)) remove(record.id); }} className="p-2 rounded-xl text-red-600" title="Delete record"><Trash2 size={16} /></button></Row>) : <EmptyState label="No company expenses or EMI reminders yet" />}</DataCard>
+  </div>;
+}
+
 function Documents({ documents, search, setSearch, exportCsv, sendReminder, onView }: { documents: DocumentRecord[]; search: string; setSearch: (v: string) => void; exportCsv: (n: string, rows: Record<string, string | number>[]) => void; sendReminder: (doc: DocumentRecord) => void; onView?: (doc: ViewableDoc) => void }) {
   const filtered = documents.filter((d) => `${d.ownerName} ${d.type} ${d.documentNumber} ${d.status}`.toLowerCase().includes(search.toLowerCase()));
   const renewDue = filtered.filter((d) => d.status !== "Valid");
@@ -2734,7 +2778,24 @@ function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record
     <div className="rounded-2xl p-4 mb-4 text-sm font-bold" style={glassSubtle}>Total expenses: {rupees(totalExpenses)} - Profit/Loss: {rupees(freight - totalExpenses)}</div>
     <Save onClick={() => onSave(files)} />
   </>;
-}function ExpenseForm({ form, setForm, trips, vehicles, onSave }: { form: Record<string, string>; setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>; trips: Trip[]; vehicles: Vehicle[]; onSave: () => void }) {
+}
+
+function CompanyExpenseForm({ form, setForm, onSave }: { form: Record<string, string>; setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>; onSave: () => void }) {
+  const set = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  const isEmi = form.type === "EMI";
+  return <>
+    <SelectField label="Record Type" value={form.type || "Expense"} onChange={(value) => set("type", value)} options={[{ value: "Expense", label: "Company Expense" }, { value: "EMI", label: "EMI Reminder" }]} />
+    <Field label={isEmi ? "EMI / Loan Name" : "Expense Name"} value={form.name || ""} onChange={(value) => set("name", value)} />
+    <Field label="Amount" type="number" value={form.amount || ""} onChange={(value) => set("amount", value)} />
+    <Field label="Expense Date" type="date" value={form.date || today} onChange={(value) => set("date", value)} />
+    {isEmi && <Field label="EMI Reminder Date" type="date" value={form.reminderDate || form.date || today} onChange={(value) => set("reminderDate", value)} />}
+    <SelectField label="Status" value={form.status || "Pending"} onChange={(value) => set("status", value)} options={[{ value: "Pending", label: "Pending" }, { value: "Paid", label: "Paid" }]} />
+    <Field label="Note" value={form.note || ""} onChange={(value) => set("note", value)} />
+    <Save onClick={onSave} />
+  </>;
+}
+
+function ExpenseForm({ form, setForm, trips, vehicles, onSave }: { form: Record<string, string>; setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>; trips: Trip[]; vehicles: Vehicle[]; onSave: () => void }) {
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const isFuel = (form.category || "Other") === "Fuel";
   return <>

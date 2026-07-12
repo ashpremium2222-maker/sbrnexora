@@ -1,5 +1,5 @@
 import express from "express";
-import { Attendance, AuditLog, BalanceFreight, CompanyProfile, Customer, DocumentRecord, Driver, Expense, Invoice, Maintenance, Notification, Payment, Payroll, Trip, Vehicle } from "../models/index.js";
+import { Attendance, AuditLog, BalanceFreight, CompanyExpense, CompanyProfile, Customer, DocumentRecord, Driver, Expense, Invoice, Maintenance, Notification, Payment, Payroll, Trip, Vehicle } from "../models/index.js";
 import { crudController } from "../controllers/crudController.js";
 import { authorize } from "../middleware/auth.js";
 
@@ -33,6 +33,7 @@ const resources = {
   customers: [Customer, {}],
   trips: [Trip, { populate: "customer vehicle driver" }],
   expenses: [Expense, { populate: "trip" }],
+  companyExpenses: [CompanyExpense, {}],
   invoices: [Invoice, { populate: "trip customer" }],
   payments: [Payment, { populate: "invoice customer" }],
   notifications: [Notification, {}],
