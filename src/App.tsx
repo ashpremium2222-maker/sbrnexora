@@ -308,7 +308,11 @@ const glassSubtle = {
   WebkitBackdropFilter: "blur(10px)",
 };
 
-const today = "2026-07-01";
+// ISO date for form defaults, using the user's local calendar day.
+const today = (() => {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+})();
 const rupees = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 function amountInWords(amount: number): string {
   const num = Math.max(0, Math.round(amount || 0));
@@ -718,8 +722,8 @@ function Toolbar({ title, subtitle, search, setSearch, action, filters }: { titl
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 bg-[#1a1d2e]/15 backdrop-blur-[2px] z-50 flex justify-end" onMouseDown={onClose}>
-      <div className="h-full w-[440px] max-w-full rounded-l-[28px] border-l border-white/60 shadow-2xl overflow-y-auto" style={{ ...glass, background: "rgba(255,255,255,0.78)" }} onMouseDown={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 flex items-center justify-between px-7 py-5 border-b border-white/50" style={{ background: "rgba(255,255,255,0.72)", backdropFilter: "blur(16px)" }}>
+      <div className="h-full w-[440px] max-w-full rounded-l-[28px] border-l border-white/60 shadow-2xl overflow-y-auto" style={{ ...glass, background: "var(--card)" }} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 flex items-center justify-between px-7 py-5 border-b border-white/50" style={{ background: "var(--card)", backdropFilter: "blur(16px)" }}>
           <h3 className="text-lg font-semibold">{title}</h3>
           <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/60"><X size={16} /></button>
         </div>
@@ -735,7 +739,7 @@ function DocumentViewerModal({ doc, onClose }: { doc: ViewableDoc; onClose: () =
   const isPdf = doc.dataUrl?.startsWith("data:application/pdf") || ext === "pdf";
   return (
     <div className="fixed inset-0 bg-[#1a1d2e]/45 backdrop-blur-sm z-[80] flex items-center justify-center p-4" onMouseDown={onClose}>
-      <div className="w-full max-w-2xl max-h-[88vh] rounded-[24px] overflow-hidden flex flex-col" style={{ ...glass, background: "rgba(255,255,255,0.92)" }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-2xl max-h-[88vh] rounded-[24px] overflow-hidden flex flex-col" style={{ ...glass, background: "var(--card)" }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/50">
           <div className="min-w-0"><p className="text-sm font-bold truncate">{doc.title || doc.fileName}</p><p className="text-xs text-[#9CA3AF] truncate">{doc.fileName}</p></div>
           <div className="flex items-center gap-2 shrink-0">
@@ -2865,7 +2869,7 @@ function OtherChargesModal({ initialAmount, initialReason, onApply, onClose }: {
   };
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: "rgba(15,17,21,0.55)" }} onMouseDown={onClose}>
-      <div className="w-full max-w-lg rounded-3xl p-6 max-h-[85vh] overflow-y-auto" style={{ background: "rgba(255,255,255,0.96)" }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg rounded-3xl p-6 max-h-[85vh] overflow-y-auto" style={{ ...glass, background: "var(--card)" }} onMouseDown={(e) => e.stopPropagation()}>
         <p className="text-lg font-bold mb-1">Other Charges Breakdown</p>
         <p className="text-xs text-[#9CA3AF] mb-4">Type an amount against any charge. Leave it blank or 0 to skip. All amounts entered add up into a single Other Charges total automatically.</p>
         <div className="rounded-2xl overflow-hidden mb-4" style={glassSubtle}>
@@ -2936,7 +2940,7 @@ function GlobalSearch({ onClose, vehicles, drivers, customers, trips, invoices, 
     ...expenses.map((e) => ({ view: "expenses" as View, type: "Expense", title: e.category, meta: `${e.note} · ${rupees(e.amount)}` })),
     ...documents.map((d) => ({ view: "documents" as View, type: "Document", title: d.documentNumber, meta: `${d.ownerName} · ${d.type}` })),
   ].filter((row) => `${row.type} ${row.title} ${row.meta}`.toLowerCase().includes(q.toLowerCase())).slice(0, 12);
-  return <div className="fixed inset-0 z-[70] bg-[#12151C]/25 backdrop-blur-sm flex items-start justify-center p-4 pt-24" onMouseDown={onClose}><div className="w-full max-w-2xl rounded-[24px] overflow-hidden" style={{ ...glass, background: "rgba(255,255,255,0.86)" }} onMouseDown={(e) => e.stopPropagation()}><div className="flex items-center gap-3 p-4 border-b border-white/60"><Search size={18} /><input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search vehicle, driver, customer, trip, invoice, expense, document or phone..." className="flex-1 bg-transparent outline-none text-sm" /><span className="text-[10px] font-bold text-[#9CA3AF]">CTRL K</span></div><div className="max-h-[420px] overflow-y-auto p-2">{rows.length ? rows.map((row) => <button key={`${row.type}-${row.title}`} onClick={() => { setView(row.view); onClose(); }} className="w-full flex items-center gap-3 rounded-2xl p-3 text-left hover:bg-white/60"><Badge label={row.type} /><div className="min-w-0"><p className="text-sm font-semibold truncate">{row.title}</p><p className="text-xs text-[#9CA3AF] truncate">{row.meta}</p></div></button>) : <EmptyState label="Start typing to search enterprise records" />}</div></div></div>;
+  return <div className="fixed inset-0 z-[70] bg-[#12151C]/25 backdrop-blur-sm flex items-start justify-center p-4 pt-24" onMouseDown={onClose}><div className="w-full max-w-2xl rounded-[24px] overflow-hidden" style={{ ...glass, background: "var(--card)" }} onMouseDown={(e) => e.stopPropagation()}><div className="flex items-center gap-3 p-4 border-b border-white/60"><Search size={18} /><input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search vehicle, driver, customer, trip, invoice, expense, document or phone..." className="flex-1 bg-transparent outline-none text-sm" /><span className="text-[10px] font-bold text-[#9CA3AF]">CTRL K</span></div><div className="max-h-[420px] overflow-y-auto p-2">{rows.length ? rows.map((row) => <button key={`${row.type}-${row.title}`} onClick={() => { setView(row.view); onClose(); }} className="w-full flex items-center gap-3 rounded-2xl p-3 text-left hover:bg-white/60"><Badge label={row.type} /><div className="min-w-0"><p className="text-sm font-semibold truncate">{row.title}</p><p className="text-xs text-[#9CA3AF] truncate">{row.meta}</p></div></button>) : <EmptyState label="Start typing to search enterprise records" />}</div></div></div>;
 }
 function InvoicePreview({ invoice, trip, customer }: { invoice?: Invoice; trip?: Trip; customer?: Customer }) {
   if (!invoice || !trip) return <div className="rounded-2xl p-6" style={glass}>Select an invoice</div>;
@@ -2944,4 +2948,3 @@ function InvoicePreview({ invoice, trip, customer }: { invoice?: Invoice; trip?:
   const gst = Math.round(subtotal * 0.18);
   return <div className="rounded-[22px] ring-1 ring-white/70 shadow-xl overflow-hidden" style={glass}><div className="p-6 border-b border-white/50 flex justify-between gap-4"><div><h3 className="text-lg font-bold">Sharma Roadlines Pvt. Ltd.</h3><p className="text-xs text-[#717182]">GSTIN: 27AABCS1429B1Z1</p></div><div className="text-right"><p className="text-2xl font-bold">TAX INVOICE</p><p className="text-xs">{invoice.id}</p><Badge label={invoice.status} /></div></div><div className="p-6 border-b border-white/50"><p className="text-[10px] font-bold text-[#9CA3AF] uppercase">Bill To</p><p className="text-sm font-bold">{customer?.company}</p><p className="text-xs text-[#717182]">{customer?.gst}</p><p className="text-xs text-[#717182]">{customer?.address}</p></div><div className="p-6 text-sm space-y-2"><p className="flex justify-between"><span>Freight Charges - {trip.pickup} to {trip.drop}</span><b>{rupees(subtotal)}</b></p><p className="flex justify-between"><span>CGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between"><span>SGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between border-t border-black/10 pt-3 text-lg"><span>Grand Total</span><b>{rupees(subtotal + gst)}</b></p></div><div className="p-4 flex gap-2"><button onClick={() => window.print()} className="flex-1 rounded-2xl py-2 text-sm font-semibold" style={glassSubtle}><Printer size={14} className="inline mr-1" />Print</button><button className="flex-1 rounded-2xl py-2 text-sm font-semibold text-white bg-[#12151C]"><Send size={14} className="inline mr-1" />Send</button></div></div>;
 }
-
