@@ -374,22 +374,24 @@ const routeByView: Record<View, string> = {
 const viewByRoute = Object.entries(routeByView).reduce((acc, [view, route]) => ({ ...acc, [route]: view as View }), {} as Record<string, View>);
 const viewFromPath = (path: string): View => viewByRoute[path] ?? (path === "/" ? "dashboard" : "dashboard");
 const defaultTelemetry = (vehicle?: Partial<Vehicle>): VehicleTelemetry => ({
-  speed: vehicle?.status === "On Trip" ? 62 : 0,
-  fuelLevel: 64,
-  batteryVoltage: 12.2,
-  gpsSignal: vehicle?.status === "Under Maintenance" ? 2 : 4,
-  ignition: vehicle?.status === "On Trip" ? "ON" : "OFF",
-  latitude: "19.0760 N",
-  longitude: "72.8777 E",
-  location: "Mumbai Fleet Yard",
-  lastUpdated: "09:42:17 AM",
-  eta: vehicle?.status === "On Trip" ? "12:15 PM" : "-",
-  odometerKm: 76000,
-  distanceTodayKm: vehicle?.status === "On Trip" ? 148 : 0,
-  engineHealth: vehicle?.status === "Under Maintenance" ? "Warning" : "Good",
-  oilHealth: vehicle?.status === "Under Maintenance" ? 55 : 82,
-  tyrePressure: vehicle?.status === "Under Maintenance" ? "Needs check" : "Normal",
-  apiSync: "Connected",
+  // A vehicle has no live telemetry until a real tracker/API sends it.
+  // Never manufacture locations, fuel, speeds, or tracker status in the UI.
+  speed: 0,
+  fuelLevel: 0,
+  batteryVoltage: 0,
+  gpsSignal: 0,
+  ignition: "OFF",
+  latitude: "",
+  longitude: "",
+  location: "No live location",
+  lastUpdated: "No live data",
+  eta: "-",
+  odometerKm: 0,
+  distanceTodayKm: 0,
+  engineHealth: "No data",
+  oilHealth: 0,
+  tyrePressure: "No data",
+  apiSync: "Not connected",
   harshEvents: 0,
 });
 const telemetryOf = (vehicle: Vehicle) => vehicle.telemetry ?? defaultTelemetry(vehicle);
@@ -646,9 +648,16 @@ function Shell({
   view, setView, role, logout, children, unread, profileName, theme, toggleTheme,
 }: { view: View; setView: (v: View) => void; role: Role; logout: () => void; children: React.ReactNode; unread: number; profileName: string; theme: "light" | "dark"; toggleTheme: () => void }) {
   const [collapsed, setCollapsed] = useState(true);
+  const [now, setNow] = useState(() => new Date());
   const items = NAV_ITEMS.filter((item) => role === "admin" || item.driver);
   const sections = Array.from(new Set(items.map((item) => item.section)));
   const isActive = (target: View) => view === target || (target === "billing" && (view === "invoices" || view === "payments"));
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 17 ? "Good afternoon" : "Good evening";
+  const dateLabel = now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   return (
     <div className="min-h-screen w-full flex font-[Inter,sans-serif] relative overflow-hidden" style={{ background: "var(--background)" }}>
       <aside className={`hidden md:flex flex-col py-5 px-2 gap-0.5 z-20 relative overflow-y-auto transition-all bg-[#0B111C] shadow-2xl ${collapsed ? "w-[88px] items-center" : "w-[238px]"}`}>
@@ -680,8 +689,8 @@ function Shell({
         {view !== "liveTracking" && <div className="flex items-center gap-3 mb-7">
           <div className="md:hidden w-10 h-10 rounded-2xl bg-[#12151C] flex items-center justify-center"><Truck size={18} className="text-white" /></div>
           <div className="flex-1">
-            <p className="text-sm text-[#7A8494]">Wednesday, 1 July 2026</p>
-            <h1 className="text-2xl font-extrabold text-[#111827]">Good morning, {role === "admin" ? profileName : "Ramesh"}</h1>
+            <p className="text-sm text-[#7A8494]">{dateLabel}</p>
+            <h1 className="text-2xl font-extrabold text-[#111827]">{greeting}, {role === "admin" ? profileName : "Ramesh"}</h1>
           </div>
           <select value={view} onChange={(e) => setView(e.target.value as View)} className="md:hidden rounded-2xl px-3 py-2 text-xs font-semibold" style={glassSubtle}>{items.map((item) => <option key={item.view} value={item.view}>{item.label}</option>)}</select>
           <button onClick={toggleTheme} title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} className="relative w-11 h-11 rounded-2xl shadow-sm flex items-center justify-center" style={glass}>{theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}</button>
@@ -1020,10 +1029,10 @@ function FileField({ label, onFiles, category = "document" }: { label: string; o
 }
 
 export default function App() {
-  // Deliberately start logged out: every fresh visit, including a deep link,
-  // must pass through the login screen before any portal data is shown.
-  const [role, setRole] = useState<Role | null>(null);
-  const [authToken, setAuthToken] = useState<string | null>(null);
+  // Keep the login only for this browser session: refreshes stay signed in,
+  // while closing the browser ends the session and requires login again.
+  const [role, setRole] = useState<Role | null>(() => (sessionStorage.getItem("sbr-role") as Role | null) || null);
+  const [authToken, setAuthToken] = useState<string | null>(() => sessionStorage.getItem("sbr-token"));
   useEffect(() => { currentAuthToken = authToken; }, [authToken]);
   const [theme, setTheme] = useState<"light" | "dark">(() => (localStorage.getItem("sbr-theme") as "light" | "dark") || "light");
   useEffect(() => {
@@ -1124,26 +1133,8 @@ export default function App() {
     };
   }, []);
 
-  // Live tracking: simulate location/ignition/fuel/speed updates so the fleet map, stop
-  // detection and fuel monitoring reflect changing data instead of frozen seed values.
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setVehicles((prev) => {
-        const next = prev.map((v) => simulateVehicleTelemetry(v));
-        setTelemetryLog((prevLog) => {
-          const updated = { ...prevLog };
-          next.forEach((v) => {
-            const t = telemetryOf(v);
-            const entry: TelemetryLogEntry = { time: t.lastUpdated, speed: t.speed, fuelLevel: t.fuelLevel, ignition: t.ignition, location: t.location };
-            updated[v.id] = [...(updated[v.id] ?? []), entry].slice(-40);
-          });
-          return updated;
-        });
-        return next;
-      });
-    }, 4000);
-    return () => window.clearInterval(timer);
-  }, []);
+  // Tracker values are intentionally not simulated. The fleet UI only shows
+  // telemetry received from an actual connected tracker/API.
 
   const customer = (id: string) => customers.find((c) => c.id === id);
   const vehicle = (id: string) => vehicles.find((v) => v.id === id);
@@ -1468,7 +1459,7 @@ export default function App() {
     a.click();
   }
 
-  if (!role) return <Login onLogin={(r, token) => { setRole(r); setAuthToken(token); setProfileName(PORTAL_NAME); setView(r === "driver" ? "trips" : "dashboard"); }} />;
+  if (!role) return <Login onLogin={(r, token) => { sessionStorage.setItem("sbr-role", r); sessionStorage.setItem("sbr-token", token); setRole(r); setAuthToken(token); setProfileName(PORTAL_NAME); setView(r === "driver" ? "trips" : "dashboard"); }} />;
 
   const page = (() => {
     if (view === "dashboard") return <Dashboard vehicles={vehicles} drivers={drivers} trips={trips} expenses={expenses} invoices={invoices} notes={notes} documents={documents} maintenancePlan={maintenancePlan} balanceFreights={balanceFreights} attendance={attendance} payroll={payroll} lastRefresh={lastRefresh} setView={setView} />;
@@ -1500,7 +1491,7 @@ export default function App() {
   })();
 
   return (
-    <Shell view={view} setView={setView} role={role} logout={() => { setRole(null); setAuthToken(null); localStorage.removeItem("sbr-role"); localStorage.removeItem("sbr-token"); }} unread={unread} profileName={profileName} theme={theme} toggleTheme={toggleTheme}>
+    <Shell view={view} setView={setView} role={role} logout={() => { setRole(null); setAuthToken(null); sessionStorage.removeItem("sbr-role"); sessionStorage.removeItem("sbr-token"); }} unread={unread} profileName={profileName} theme={theme} toggleTheme={toggleTheme}>
       {page}
       {modal === "vehicle" && <Modal title={form.id ? "Edit Vehicle" : "Add Vehicle"} onClose={() => setModal(null)}><VehicleForm form={form} setForm={setForm} drivers={drivers} onSave={(files) => {
         const existing = vehicles.find((x) => x.id === form.id);
@@ -1621,7 +1612,37 @@ export default function App() {
 function Dashboard({ vehicles, drivers, trips, expenses, invoices, notes, documents, maintenancePlan, balanceFreights, attendance, payroll, lastRefresh, setView }: { vehicles: Vehicle[]; drivers: Driver[]; trips: Trip[]; expenses: Expense[]; invoices: Invoice[]; notes: Notification[]; documents: DocumentRecord[]; maintenancePlan: MaintenanceRecord[]; balanceFreights: BalanceFreightRecord[]; attendance: AttendanceRecord[]; payroll: PayrollRecord[]; lastRefresh: Date; setView: (v: View) => void }) {
   const revenue = trips.reduce((s, t) => s + t.freight, 0);
   const expense = expenses.reduce((s, e) => s + e.amount, 0);
-  const chartData = ["Apr", "May", "Jun", "Jul"].map((m, i) => ({ month: m, trips: [18, 24, 31, trips.length][i], revenue: [280000, 360000, 532000, revenue][i], expense: [180000, 210000, 285000, expense][i], profit: [100000, 150000, 247000, revenue - expense][i], fuel: [72000, 88000, 96000, expenses.filter((e) => e.category === "Fuel").reduce((s, e) => s + e.amount, 0)][i] }));
+  // Build every chart strictly from saved portal records. No demo months or
+  // placeholder values are added when the business has not entered data yet.
+  const monthly = new Map<string, { trips: number; revenue: number; expense: number; fuel: number }>();
+  const monthKey = (value?: string) => /^\d{4}-\d{2}/.test(value || "") ? (value as string).slice(0, 7) : null;
+  const ensureMonth = (key: string) => {
+    const current = monthly.get(key) ?? { trips: 0, revenue: 0, expense: 0, fuel: 0 };
+    monthly.set(key, current);
+    return current;
+  };
+  trips.forEach((trip) => {
+    const key = monthKey(trip.date);
+    if (!key) return;
+    const current = ensureMonth(key);
+    current.trips += 1;
+    current.revenue += Number(trip.freight || 0);
+  });
+  expenses.forEach((entry) => {
+    const key = monthKey(entry.date);
+    if (!key) return;
+    const current = ensureMonth(key);
+    current.expense += Number(entry.amount || 0);
+    if (entry.category === "Fuel") current.fuel += Number(entry.amount || 0);
+  });
+  const chartData = [...monthly.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-6)
+    .map(([key, value]) => ({
+      month: new Date(`${key}-01T00:00:00`).toLocaleDateString("en-IN", { month: "short", year: "2-digit" }),
+      ...value,
+      profit: value.revenue - value.expense,
+    }));
   const categoryData = ["Fuel", "Toll", "Maintenance", "Salary", "Allowance", "Parking", "Other"].map((name) => ({ name, value: expenses.filter((e) => e.category === name).reduce((s, e) => s + e.amount, 0) })).filter((item) => item.value > 0);
   const pendingInvoices = invoices.filter((i) => i.status !== "Paid");
   const outstanding = pendingInvoices.reduce((s, i) => s + ((i.total ?? (trips.find((t) => t.id === i.tripId)?.freight ?? 0) * 1.18) - (i.paidAmount ?? 0)), 0);
@@ -2923,10 +2944,5 @@ function InvoicePreview({ invoice, trip, customer }: { invoice?: Invoice; trip?:
   const gst = Math.round(subtotal * 0.18);
   return <div className="rounded-[22px] ring-1 ring-white/70 shadow-xl overflow-hidden" style={glass}><div className="p-6 border-b border-white/50 flex justify-between gap-4"><div><h3 className="text-lg font-bold">Sharma Roadlines Pvt. Ltd.</h3><p className="text-xs text-[#717182]">GSTIN: 27AABCS1429B1Z1</p></div><div className="text-right"><p className="text-2xl font-bold">TAX INVOICE</p><p className="text-xs">{invoice.id}</p><Badge label={invoice.status} /></div></div><div className="p-6 border-b border-white/50"><p className="text-[10px] font-bold text-[#9CA3AF] uppercase">Bill To</p><p className="text-sm font-bold">{customer?.company}</p><p className="text-xs text-[#717182]">{customer?.gst}</p><p className="text-xs text-[#717182]">{customer?.address}</p></div><div className="p-6 text-sm space-y-2"><p className="flex justify-between"><span>Freight Charges - {trip.pickup} to {trip.drop}</span><b>{rupees(subtotal)}</b></p><p className="flex justify-between"><span>CGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between"><span>SGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between border-t border-black/10 pt-3 text-lg"><span>Grand Total</span><b>{rupees(subtotal + gst)}</b></p></div><div className="p-4 flex gap-2"><button onClick={() => window.print()} className="flex-1 rounded-2xl py-2 text-sm font-semibold" style={glassSubtle}><Printer size={14} className="inline mr-1" />Print</button><button className="flex-1 rounded-2xl py-2 text-sm font-semibold text-white bg-[#12151C]"><Send size={14} className="inline mr-1" />Send</button></div></div>;
 }
-
-
-
-
-
 
 
