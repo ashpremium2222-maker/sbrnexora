@@ -134,6 +134,7 @@ function mapTripFromApi(doc: Record<string, unknown>): Trip {
     size: doc.size ? String(doc.size) : undefined, billNo: doc.billNo ? String(doc.billNo) : undefined, chNo: doc.chNo ? String(doc.chNo) : undefined,
     receivedDate: doc.receivedDate ? String(doc.receivedDate).slice(0, 10) : undefined,
     otherChargesReason: doc.otherChargesReason ? String(doc.otherChargesReason) : undefined,
+    expenseRemarks: ((doc.expenseRemarks as Record<string, unknown>[]) || []).map((entry) => ({ category: String(entry.category || "Other"), amount: Number(entry.amount || 0), remark: String(entry.remark || "") })),
     podDocs: ((doc.podDocs as Record<string, unknown>[]) || []).map((d) => String(d.url || d.fileName || "")).filter(Boolean), remarks: doc.remarks ? String(doc.remarks) : undefined,
   };
 }
@@ -145,7 +146,7 @@ function tripToApiPayload(item: Trip) {
     tollCharges: item.tollCharges, driverAllowance: item.driverAllowance, otherExpenses: item.otherExpenses, invoiceNumber: item.invoiceNumber, paymentStatus: item.paymentStatus,
     ewayBill: item.ewayBill, deliveryReceipt: item.deliveryReceipt, status: item.status, remarks: item.remarks,
     size: item.size, billNo: item.billNo, chNo: item.chNo, receivedDate: item.receivedDate || undefined,
-    otherChargesReason: item.otherChargesReason,
+    otherChargesReason: item.otherChargesReason, expenseRemarks: item.expenseRemarks || [],
   };
 }
 
@@ -253,11 +254,21 @@ type Customer = {
   id: string; company: string; contact: string; phone: string; email: string; gst: string; address: string;
   creditLimit?: number;
 };
+type TripExpenseRemark = { category: string; amount: number; remark: string };
+const parseTripExpenseRemarks = (value?: string): TripExpenseRemark[] => {
+  try {
+    const rows = JSON.parse(value || "[]");
+    return Array.isArray(rows) ? rows
+      .map((row) => ({ category: String(row?.category || "").trim(), amount: Number(row?.amount || 0), remark: String(row?.remark || "").trim() }))
+      .filter((row) => row.category && (row.amount > 0 || row.remark))
+      : [];
+  } catch { return []; }
+};
 type Trip = {
   id: string; customerId: string; vehicleId: string; driverId: string; pickup: string; drop: string;
   cargo: string; date: string; distanceKm: number; durationHrs: number; freight: number; status: TripStatus;
   lrNumber?: string; cargoName?: string; materialType?: string; weight?: string; quantity?: string; endDate?: string;
-  advanceAmount?: number; tollCharges?: number; driverAllowance?: number; otherExpenses?: number; otherChargesReason?: string; invoiceNumber?: string; paymentStatus?: PaymentStatus;
+  advanceAmount?: number; tollCharges?: number; driverAllowance?: number; otherExpenses?: number; otherChargesReason?: string; expenseRemarks?: TripExpenseRemark[]; invoiceNumber?: string; paymentStatus?: PaymentStatus;
   ewayBill?: string; deliveryReceipt?: string;
   size?: string; billNo?: string; chNo?: string; receivedDate?: string;
   podDocs: string[]; remarks?: string;
@@ -1279,6 +1290,7 @@ export default function App() {
         advanceAmount: Number(form.advanceAmount || 0),
         otherExpenses: Number(form.otherCharges || 0),
         otherChargesReason: form.otherChargesReason ?? t.otherChargesReason,
+        expenseRemarks: form.tripExpenseRemarksJson !== undefined ? parseTripExpenseRemarks(form.tripExpenseRemarksJson) : (t.expenseRemarks ?? []),
         invoiceNumber: form.invoiceNumber ?? t.invoiceNumber,
         paymentStatus: (form.paymentStatus || t.paymentStatus || "Pending") as PaymentStatus,
         ewayBill: form.ewayBill ?? t.ewayBill,
@@ -1295,7 +1307,7 @@ export default function App() {
       return;
     }
     const assignedDriverId = vehicles.find((v) => v.id === form.vehicleId)?.currentDriverId || form.driverId || "";
-    const newTrip: Trip = { id: uid("TRIP"), lrNumber: uid("LR"), customerId: form.customerId, vehicleId: form.vehicleId, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo || "", chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advanceAmount: Number(form.advanceAmount || 0), tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: podUrls, remarks: form.remarks || "" };
+    const newTrip: Trip = { id: uid("TRIP"), lrNumber: uid("LR"), customerId: form.customerId, vehicleId: form.vehicleId, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo || "", chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advanceAmount: Number(form.advanceAmount || 0), tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", expenseRemarks: parseTripExpenseRemarks(form.tripExpenseRemarksJson), invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: podUrls, remarks: form.remarks || "" };
     setTrips((t) => [newTrip, ...t]);
     setVehicles((v) => v.map((x) => x.id === newTrip.vehicleId ? { ...x, status: "On Trip" } : x));
     if (assignedDriverId) { setDrivers((d) => d.map((x) => x.id === assignedDriverId ? { ...x, status: "On Trip", assignedVehicleId: newTrip.vehicleId } : x)); markAttendance(assignedDriverId, newTrip.date, "Present", `Auto-marked: vehicle ${vehicle(newTrip.vehicleId)?.number ?? ""} running trip ${newTrip.id}`); }
@@ -1498,7 +1510,7 @@ export default function App() {
     if (view === "liveTracking") return <LiveTracking vehicles={vehicles} drivers={drivers} trips={trips} telemetryLog={telemetryLog} />;
     if (view === "drivers") return <DriversWithDelete drivers={drivers} search={search} setSearch={setSearch} openModal={openModal} edit={(item) => openModal("driver", Object.fromEntries(Object.entries(item).filter(([k]) => k !== "documents").map(([k, v]) => [k, String(v)])))} select={(id) => { setSelected(id); openModal("driverDetails"); }} remove={deleteDriver} />;
     if (view === "customers") return <CustomersWithDelete customers={customers} trips={trips} search={search} setSearch={setSearch} openModal={openModal} remove={deleteCustomer} />;
-    if (view === "trips") return <TripsWithView trips={trips} customers={customers} vehicles={vehicles} drivers={drivers} role={role} search={search} setSearch={setSearch} openModal={openModal} updateTripStatus={updateTripStatus} setView={setView} exportCsv={exportCsv} onBill={setBillTripId} edit={(t) => openModal("trip", Object.fromEntries(Object.entries(t).filter(([k]) => k !== "podDocs").map(([k, v]) => [k, String(v ?? "")])))} remove={deleteTrip} onPodUpload={handlePodUpload} onView={setDocPreview} />;
+    if (view === "trips") return <TripsWithView trips={trips} customers={customers} vehicles={vehicles} drivers={drivers} role={role} search={search} setSearch={setSearch} openModal={openModal} updateTripStatus={updateTripStatus} setView={setView} exportCsv={exportCsv} onBill={setBillTripId} edit={(t) => openModal("trip", { ...Object.fromEntries(Object.entries(t).filter(([k]) => k !== "podDocs" && k !== "expenseRemarks").map(([k, v]) => [k, String(v ?? "")])), tripExpenseRemarksJson: JSON.stringify(t.expenseRemarks ?? []) })} remove={deleteTrip} onPodUpload={handlePodUpload} onView={setDocPreview} />;
     if (view === "expenses" || view === "fuel") return <Expenses view={view} expenses={expenses} trips={trips} vehicles={vehicles} drivers={drivers} openModal={openModal} exportCsv={exportCsv} />;
     if (view === "maintenance") return <MaintenanceModule records={maintenancePlan} vehicles={vehicles} trips={trips} openModal={openModal} exportCsv={exportCsv} />;
     if (view === "vehicleHealth") return <VehicleHealth vehicles={vehicles} maintenancePlan={maintenancePlan} expenses={expenses} documents={documents} />;
@@ -2098,7 +2110,7 @@ function Trips({ trips, customers, vehicles, drivers, role, search, setSearch, o
   const filtered = trips.filter((t) => `${t.id} ${t.lrNumber ?? ""} ${t.pickup} ${t.drop} ${t.cargo} ${t.cargoName ?? ""}`.toLowerCase().includes(search.toLowerCase()));
   const statusOptions: TripStatus[] = ["Draft", "Assigned", "In Transit", "Completed", "Cancelled"];
   return <div><Toolbar title={role === "driver" ? "My Bookings" : "Booking Register"} subtitle="LR, cargo, live tracking, POD upload, trip billing and status control" search={search} setSearch={setSearch} action={<>{role === "admin" && <button onClick={() => exportCsv("booking-register", trips.map((t) => ({ id: t.id, date: t.date, lrNumber: t.lrNumber ?? "", vehicleNo: vehicles.find((v) => v.id === t.vehicleId)?.number ?? "", driver: drivers.find((d) => d.id === t.driverId)?.name ?? "", partyName: customers.find((c) => c.id === t.customerId)?.company ?? "", from: t.pickup, to: t.drop, freight: t.freight, advance: t.advanceAmount ?? 0, balance: Math.max(t.freight - (t.advanceAmount ?? 0), 0), otherCharges: t.otherExpenses ?? 0, otherChargesReason: t.otherChargesReason ?? "", invoiceNumber: t.invoiceNumber ?? "", paymentStatus: t.paymentStatus ?? "", status: t.status, remarks: t.remarks ?? "" })))} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Download size={15} />Export Excel</button>}<button onClick={() => setView("tripReport")} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><FileText size={15} />Report</button>{role === "admin" && <button onClick={() => openModal("trip")} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />New Booking</button>}</>} />
-    <DataCard>{filtered.map((t) => { const totalExpenses = (t.tollCharges ?? 0) + (t.driverAllowance ?? 0) + (t.otherExpenses ?? 0); const profit = t.freight - totalExpenses; return <Row key={t.id}><div className="w-10 h-10 rounded-xl bg-[#12151C] text-white flex items-center justify-center"><Route size={17} /></div><div className="flex-1 min-w-[260px]"><p className="text-sm font-semibold">{t.pickup} <ChevronRight size={12} className="inline" /> {t.drop}</p><p className="text-xs text-[#9CA3AF]">{t.id} - {t.lrNumber || "No LR"} - {customers.find((c) => c.id === t.customerId)?.company} - {t.cargoName || t.cargo}</p><p className="text-xs text-[#9CA3AF]">Cargo: {t.materialType || "-"} - {t.weight || "-"} - Qty {t.quantity || "-"} - {t.date}{t.endDate ? ` to ${t.endDate}` : ""}</p>{t.remarks && <p className="text-xs text-[#9CA3AF] italic mt-0.5">Remarks: {t.remarks}</p>}</div><p className="hidden lg:block text-xs">{vehicles.find((v) => v.id === t.vehicleId)?.number}</p><p className="hidden lg:block text-xs">{drivers.find((d) => d.id === t.driverId)?.name}</p><div className="text-xs min-w-[170px]"><p className="font-bold">{rupees(t.freight)}</p><p className="text-[#9CA3AF]">Advance {rupees(t.advanceAmount ?? 0)}</p><p className={profit < 0 ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>P/L {rupees(profit)}</p></div><div className="text-xs min-w-[150px]"><p>Expenses {rupees(totalExpenses)}</p><p>Invoice {t.invoiceNumber || "-"}</p><Badge label={t.paymentStatus || "Pending"} /></div><select value={t.status} onChange={(e) => updateTripStatus(t.id, e.target.value as TripStatus)} className="rounded-xl px-3 py-2 text-xs font-semibold outline-none" style={glassSubtle}>{statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}</select>{role === "admin" && <button onClick={() => onBill(t.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}><Receipt size={13} />Bill</button>}{role === "admin" && <button onClick={() => edit(t)} className="px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}>Edit</button>}{role === "admin" && <button onClick={() => remove(t.id)} className="px-3 py-2 rounded-xl text-xs font-semibold text-white bg-red-600">Delete</button>}<FileField label="POD" category="pod" onFiles={(files) => onPodUpload(t.id, files)} /></Row>; })}</DataCard>
+    <DataCard>{filtered.map((t) => { const tripBreakdownTotal = (t.expenseRemarks ?? []).reduce((sum, item) => sum + item.amount, 0); const totalExpenses = (t.tollCharges ?? 0) + (t.driverAllowance ?? 0) + (t.otherExpenses ?? 0) + tripBreakdownTotal; const profit = t.freight - totalExpenses; return <Row key={t.id}><div className="w-10 h-10 rounded-xl bg-[#12151C] text-white flex items-center justify-center"><Route size={17} /></div><div className="flex-1 min-w-[260px]"><p className="text-sm font-semibold">{t.pickup} <ChevronRight size={12} className="inline" /> {t.drop}</p><p className="text-xs text-[#9CA3AF]">{t.id} - {t.lrNumber || "No LR"} - {customers.find((c) => c.id === t.customerId)?.company} - {t.cargoName || t.cargo}</p><p className="text-xs text-[#9CA3AF]">Cargo: {t.materialType || "-"} - {t.weight || "-"} - Qty {t.quantity || "-"} - {t.date}{t.endDate ? ` to ${t.endDate}` : ""}</p>{t.remarks && <p className="text-xs text-[#9CA3AF] italic mt-0.5">Remarks: {t.remarks}</p>}{t.expenseRemarks?.length ? <p className="text-xs text-[#52708D] mt-1">Trip breakdown: {t.expenseRemarks.map((item) => `${item.category} ${rupees(item.amount)}${item.remark ? ` (${item.remark})` : ""}`).join(" · ")}</p> : null}</div><p className="hidden lg:block text-xs">{vehicles.find((v) => v.id === t.vehicleId)?.number}</p><p className="hidden lg:block text-xs">{drivers.find((d) => d.id === t.driverId)?.name}</p><div className="text-xs min-w-[170px]"><p className="font-bold">{rupees(t.freight)}</p><p className="text-[#9CA3AF]">Advance {rupees(t.advanceAmount ?? 0)}</p><p className={profit < 0 ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>P/L {rupees(profit)}</p></div><div className="text-xs min-w-[150px]"><p>Expenses {rupees(totalExpenses)}</p><p>Invoice {t.invoiceNumber || "-"}</p><Badge label={t.paymentStatus || "Pending"} /></div><select value={t.status} onChange={(e) => updateTripStatus(t.id, e.target.value as TripStatus)} className="rounded-xl px-3 py-2 text-xs font-semibold outline-none" style={glassSubtle}>{statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}</select>{role === "admin" && <button onClick={() => onBill(t.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}><Receipt size={13} />Bill</button>}{role === "admin" && <button onClick={() => edit(t)} className="px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}>Edit</button>}{role === "admin" && <button onClick={() => remove(t.id)} className="px-3 py-2 rounded-xl text-xs font-semibold text-white bg-red-600">Delete</button>}<FileField label="POD" category="pod" onFiles={(files) => onPodUpload(t.id, files)} /></Row>; })}</DataCard>
   </div>;
 }function Expenses({ view, expenses, trips, vehicles, drivers, openModal, exportCsv }: { view: View; expenses: Expense[]; trips: Trip[]; vehicles: Vehicle[]; drivers: Driver[]; openModal: (m: string, f?: Record<string, string>) => void; exportCsv: (n: string, rows: Record<string, string | number>[]) => void }) {
   const [dateFilter, setDateFilter] = useState("");
@@ -2688,6 +2700,7 @@ function CustomerForm({ form, setForm, onSave }: { form: Record<string, string>;
 function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record<string, string>; setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>; customers: Customer[]; vehicles: Vehicle[]; onSave: (files: UploadedFile[]) => void }) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [showCharges, setShowCharges] = useState(false);
+  const [showTripExpenses, setShowTripExpenses] = useState(false);
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const availableVehicles = vehicles.filter((v) => v.status === "Available" || v.id === form.vehicleId);
   const freight = Number(form.freight || 0);
@@ -2709,6 +2722,10 @@ function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record
     <Field label="Bill No." value={form.billNo || ""} onChange={(v) => set("billNo", v)} />
     <Field label="Ch. No." value={form.chNo || ""} onChange={(v) => set("chNo", v)} />
     <Field label="Remarks" value={form.remarks || ""} onChange={(v) => set("remarks", v)} />
+    <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]">Trip Expense & Remarks
+      <div className="mt-1.5 flex gap-2"><button type="button" onClick={() => setShowTripExpenses((value) => !value)} className="px-4 py-3 rounded-2xl text-xs font-semibold" style={glassSubtle}>{showTripExpenses ? "Close breakdown" : "Add trip breakdown"}</button>{parseTripExpenseRemarks(form.tripExpenseRemarksJson).length > 0 && <span className="self-center text-xs text-[#6B7280]">{parseTripExpenseRemarks(form.tripExpenseRemarksJson).length} saved item(s)</span>}</div>
+    </label>
+    {showTripExpenses && <TripExpenseRemarkBreakdown initialRows={parseTripExpenseRemarks(form.tripExpenseRemarksJson)} onApply={(rows) => set("tripExpenseRemarksJson", JSON.stringify(rows))} onClose={() => setShowTripExpenses(false)} />}
 
     <FormSection title="Charges & Billing" />
     <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]">Other Charges
@@ -2890,30 +2907,30 @@ function Metric({ title, value, onClick }: { title: string; value: string; onCli
   return <Tag onClick={onClick} className={`rounded-[20px] p-5 bg-white border border-[#E7EEF7] shadow-[0_12px_30px_rgba(15,23,42,0.07)] min-w-0 overflow-hidden text-left w-full ${onClick ? "hover:border-[#C7D6EA] cursor-pointer transition-colors" : ""}`}><p className="text-xs text-[#9CA3AF] uppercase tracking-wider font-bold truncate">{title}</p><p className={`${size} font-extrabold mt-2 text-[#111827] truncate`} title={value}>{value}</p>{onClick && <p className="text-[10px] text-[#9CA3AF] mt-1">Tap to view full details</p>}</Tag>;
 }
 function Save({ onClick }: { onClick: () => void }) { return <button onClick={onClick} className="w-full mt-2 rounded-2xl bg-[#1a1d2e] px-5 py-3 text-sm font-semibold text-white">Save</button>; }
-type ChargeRow = { id: string; name: string; amount: string; remark?: string; custom?: boolean };
-const DEFAULT_CHARGE_NAMES = ["Toll / FASTag", "Fuel", "Fooding", "AdBlue", "Detention", "Weight Receipt", "Loading Charge", "Unloading Charge", "Warai Charge", "Extra Weight", "Extra Size", "Challan Fine", "St Charge"];
+type ChargeRow = { id: string; name: string; amount: string; custom?: boolean };
+const DEFAULT_CHARGE_NAMES = ["Detention", "Weight Receipt", "Loading Charge", "Unloading Charge", "Warai Charge", "Extra Weight", "Extra Size", "Challan Fine", "St Charge"];
 function OtherChargesModal({ initialAmount, initialReason, onApply, onClose }: { initialAmount: string; initialReason: string; onApply: (amount: string, reason: string) => void; onClose: () => void }) {
   const [rows, setRows] = useState<ChargeRow[]>(() => {
-    const base: ChargeRow[] = DEFAULT_CHARGE_NAMES.map((n) => ({ id: uid("chg"), name: n, amount: "", remark: "" }));
+    const base: ChargeRow[] = DEFAULT_CHARGE_NAMES.map((n) => ({ id: uid("chg"), name: n, amount: "" }));
     if (Number(initialAmount || 0) > 0) base.push({ id: uid("chg"), name: initialReason || "Other", amount: initialAmount, custom: true });
     return base;
   });
-  const addCustomRow = () => setRows((r) => [...r, { id: uid("chg"), name: "", amount: "", remark: "", custom: true }]);
+  const addCustomRow = () => setRows((r) => [...r, { id: uid("chg"), name: "", amount: "", custom: true }]);
   const updateRow = (id: string, patch: Partial<ChargeRow>) => setRows((r) => r.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   const removeRow = (id: string) => setRows((r) => r.filter((row) => row.id !== id));
   const total = rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
   const apply = () => {
-    const reasonParts = rows.filter((r) => Number(r.amount || 0) > 0 && r.name.trim()).map((r) => `${r.name}${r.remark?.trim() ? ` (${r.remark.trim()})` : ""}: ${rupees(Number(r.amount || 0))}`);
+    const reasonParts = rows.filter((r) => Number(r.amount || 0) > 0 && r.name.trim()).map((r) => `${r.name}: ${rupees(Number(r.amount || 0))}`);
     onApply(String(total), reasonParts.join("; "));
     onClose();
   };
   return (
     <div className="relative z-20 w-full rounded-3xl p-4 mb-4 border border-white/60 shadow-xl" style={{ ...glass, background: "var(--card)" }}>
       <div className="max-h-[55vh] overflow-y-auto pr-1">
-        <p className="text-lg font-bold mb-1">Trip Expense & Remark Breakdown</p>
-        <p className="text-xs text-[#9CA3AF] mb-4">Add Toll/FASTag, Fuel, Fooding, AdBlue, or any other charge. Add a remark where needed; only entered amounts count toward Other Charges.</p>
+        <p className="text-lg font-bold mb-1">Other Charges Breakdown</p>
+        <p className="text-xs text-[#9CA3AF] mb-4">Type an amount against any charge. Leave it blank or 0 to skip. All amounts entered add up into a single Other Charges total automatically.</p>
         <div className="rounded-2xl overflow-hidden mb-4" style={glassSubtle}>
-          <div className="grid grid-cols-[1fr_110px_28px] gap-2 px-3 py-2 text-xs font-bold text-[#9CA3AF] border-b border-white/60"><span>Expense</span><span>Amount</span><span /></div>
+          <div className="grid grid-cols-[1fr_110px_28px] gap-2 px-3 py-2 text-xs font-bold text-[#9CA3AF] border-b border-white/60"><span>Name</span><span>Amount</span><span /></div>
           {rows.map((row) => (
             <div key={row.id} className="grid grid-cols-[1fr_110px_28px] gap-2 px-3 py-1.5 items-center rounded-lg">
               {row.custom ? (
@@ -2923,8 +2940,6 @@ function OtherChargesModal({ initialAmount, initialReason, onApply, onClose }: {
               )}
               <input type="number" value={row.amount} onWheel={(e) => e.currentTarget.blur()} onChange={(e) => updateRow(row.id, { amount: e.target.value })} placeholder="0" className="rounded-xl border border-white/60 bg-white/70 px-2 py-1.5 text-xs outline-none" />
               {row.custom ? <button onClick={() => removeRow(row.id)} className="w-6 h-6 rounded-lg flex items-center justify-center text-red-600"><X size={12} /></button> : <span />}
-              <input value={row.remark || ""} onChange={(e) => updateRow(row.id, { remark: e.target.value })} placeholder="Remark (optional)" className="col-span-2 rounded-xl border border-white/60 bg-white/70 px-2 py-1.5 text-xs outline-none" />
-              <span />
             </div>
           ))}
         </div>
@@ -2937,6 +2952,34 @@ function OtherChargesModal({ initialAmount, initialReason, onApply, onClose }: {
       </div>
     </div>
   );
+}
+type TripExpenseRow = { id: string; category: string; amount: string; remark: string; custom?: boolean };
+const DEFAULT_TRIP_EXPENSES = ["Toll / FASTag", "Fuel", "Fooding", "AdBlue"];
+function TripExpenseRemarkBreakdown({ initialRows, onApply, onClose }: { initialRows: TripExpenseRemark[]; onApply: (rows: TripExpenseRemark[]) => void; onClose: () => void }) {
+  const [rows, setRows] = useState<TripExpenseRow[]>(() => {
+    const existing = initialRows.map((row) => ({ id: uid("trip-expense"), category: row.category, amount: String(row.amount || ""), remark: row.remark || "", custom: !DEFAULT_TRIP_EXPENSES.includes(row.category) }));
+    return existing.length ? existing : DEFAULT_TRIP_EXPENSES.map((category) => ({ id: uid("trip-expense"), category, amount: "", remark: "" }));
+  });
+  const update = (id: string, patch: Partial<TripExpenseRow>) => setRows((current) => current.map((row) => row.id === id ? { ...row, ...patch } : row));
+  const add = () => setRows((current) => [...current, { id: uid("trip-expense"), category: "", amount: "", remark: "", custom: true }]);
+  const remove = (id: string) => setRows((current) => current.filter((row) => row.id !== id));
+  const savedRows = rows.map((row) => ({ category: row.category.trim(), amount: Number(row.amount || 0), remark: row.remark.trim() })).filter((row) => row.category && (row.amount > 0 || row.remark));
+  return <div className="relative z-20 w-full rounded-3xl p-4 mb-4 border border-white/60 shadow-xl" style={{ ...glass, background: "var(--card)" }}>
+    <p className="text-lg font-bold mb-1">Trip Expense & Remark Breakdown</p>
+    <p className="text-xs text-[#9CA3AF] mb-4">These trip expenses are separate from Other Charges and are saved with this booking.</p>
+    <div className="max-h-[50vh] overflow-y-auto pr-1 space-y-2">
+      {rows.map((row) => <div key={row.id} className="rounded-2xl p-3" style={glassSubtle}>
+        <div className="grid grid-cols-[1fr_105px_28px] gap-2 items-center">
+          {row.custom ? <input value={row.category} onChange={(e) => update(row.id, { category: e.target.value })} placeholder="Expense name" className="rounded-xl border border-white/60 bg-white/70 px-2 py-2 text-xs outline-none" /> : <span className="text-xs font-semibold px-2">{row.category}</span>}
+          <input type="number" value={row.amount} onWheel={(e) => e.currentTarget.blur()} onChange={(e) => update(row.id, { amount: e.target.value })} placeholder="Amount" className="rounded-xl border border-white/60 bg-white/70 px-2 py-2 text-xs outline-none" />
+          {row.custom ? <button type="button" onClick={() => remove(row.id)} className="w-7 h-7 rounded-lg flex items-center justify-center text-red-600"><X size={12} /></button> : <span />}
+        </div>
+        <input value={row.remark} onChange={(e) => update(row.id, { remark: e.target.value })} placeholder="Trip remark (optional)" className="mt-2 w-full rounded-xl border border-white/60 bg-white/70 px-2 py-2 text-xs outline-none" />
+      </div>)}
+    </div>
+    <button type="button" onClick={add} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold mt-3" style={glassSubtle}><Plus size={13} />Add expense</button>
+    <div className="flex justify-end gap-3 mt-4"><button type="button" onClick={onClose} className="px-5 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}>Close</button><button type="button" onClick={() => { onApply(savedRows); onClose(); }} className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]">Save trip breakdown</button></div>
+  </div>;
 }
 function EmptyState({ label }: { label: string }) { return <div className="rounded-xl p-4 text-center text-xs text-[#9CA3AF] bg-white/35">{label}</div>; }
 function VehicleDetails({ vehicle, onView, onReassignDriver, drivers }: { vehicle: Vehicle; onView?: (doc: ViewableDoc) => void; onReassignDriver?: () => void; drivers?: Driver[] }) {

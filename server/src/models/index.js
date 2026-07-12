@@ -136,6 +136,11 @@ export const Trip = mongoose.model("Trip", new mongoose.Schema({
   chNo: String,
   receivedDate: Date,
   otherChargesReason: String,
+  expenseRemarks: [{
+    category: String,
+    amount: { type: Number, default: 0 },
+    remark: String,
+  }],
   remarks: String,
   status: { type: String, enum: ["Draft", "Assigned", "In Transit", "Completed", "Cancelled"], default: "Assigned" },
   profitAnalysis: moneyBreakdownSchema,
