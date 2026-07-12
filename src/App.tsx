@@ -397,7 +397,9 @@ const routeByView: Record<View, string> = {
   profile: "/settings/users",
 };
 const viewByRoute = Object.entries(routeByView).reduce((acc, [view, route]) => ({ ...acc, [route]: view as View }), {} as Record<string, View>);
-const viewFromPath = (path: string): View => viewByRoute[path] ?? (path === "/" ? "dashboard" : "dashboard");
+const removedPortalRoutes = new Set(["/fleet/live-tracking", "/maintenance/vehicle-health", "/finance/billing"]);
+const removedPortalViews = new Set<View>(["liveTracking", "vehicleHealth", "billing", "invoices", "payments"]);
+const viewFromPath = (path: string): View => removedPortalRoutes.has(path) ? "dashboard" : (viewByRoute[path] ?? "dashboard");
 const defaultTelemetry = (vehicle?: Partial<Vehicle>): VehicleTelemetry => ({
   // A vehicle has no live telemetry until a real tracker/API sends it.
   // Never manufacture locations, fuel, speeds, or tracker status in the UI.
@@ -648,8 +650,6 @@ type NavItem = { view: View; label: string; icon: React.ElementType; driver?: bo
 const NAV_ITEMS: NavItem[] = [
   { view: "dashboard", label: "Dashboard", icon: LayoutDashboard, driver: true, section: "Overview" },
   { view: "vehicles", label: "Vehicles", icon: Truck, section: "Fleet" },
-  { view: "liveTracking", label: "Live Tracking", icon: MapPin, driver: true, section: "Fleet" },
-  { view: "vehicleHealth", label: "Vehicle Health", icon: CheckCircle2, section: "Fleet" },
   { view: "maintenance", label: "Service", icon: Wrench, section: "Fleet" },
   { view: "fuel", label: "Fuel", icon: Fuel, section: "Fleet" },
   { view: "trips", label: "Booking Register", icon: Route, driver: true, section: "Operations" },
@@ -659,7 +659,6 @@ const NAV_ITEMS: NavItem[] = [
   { view: "documents", label: "Documents", icon: ShieldCheck, section: "Operations" },
   { view: "notifications", label: "Alerts", icon: Bell, driver: true, section: "Operations" },
   { view: "expenses", label: "Expenses", icon: Receipt, driver: true, section: "Finance" },
-  { view: "billing", label: "Billing", icon: FileText, section: "Finance" },
   { view: "salary", label: "Salary", icon: IndianRupee, section: "Finance" },
   { view: "attendance", label: "Attendance", icon: Calendar, section: "Admin" },
   { view: "reports", label: "Reports", icon: BarChart3, section: "Admin" },
@@ -1188,6 +1187,7 @@ export default function App() {
   const expenseTotal = expenses.reduce((s, e) => s + e.amount, 0);
   const unread = notes.filter((n) => !n.read).length;
   const setView = (next: View) => {
+    if (removedPortalViews.has(next)) next = "dashboard";
     setViewState(next);
     const route = routeByView[next];
     if (route && window.location.pathname !== route) window.history.pushState({}, "", route);
