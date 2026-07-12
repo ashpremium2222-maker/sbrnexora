@@ -34,6 +34,16 @@ async function apiFetch(path: string, token: string | null, options: RequestInit
   return data;
 }
 
+function mapCompanyProfileFromApi(doc: Record<string, unknown>): CompanyProfile {
+  const fields: (keyof CompanyProfile)[] = ["name", "tagline", "gst", "phone", "phone2", "email", "address", "jurisdiction", "pan", "bankName", "bankBranch", "bankAccount", "bankIfsc"];
+  return fields.reduce((profile, field) => ({ ...profile, [field]: String(doc[field] ?? profile[field] ?? "") }), { ...seedCompanyProfile });
+}
+
+function companyProfileToApiPayload(profile: CompanyProfile) {
+  const { name, tagline, gst, phone, phone2, email, address, jurisdiction, pan, bankName, bankBranch, bankAccount, bankIfsc } = profile;
+  return { name, tagline, gst, phone, phone2, email, address, jurisdiction, pan, bankName, bankBranch, bankAccount, bankIfsc };
+}
+
 function mapVehicleFromApi(doc: Record<string, unknown>): Vehicle {
   return {
     id: String(doc._id),
@@ -1083,6 +1093,15 @@ export default function App() {
     apiFetch("/payroll?limit=200", authToken)
       .then((data) => setPayroll((data.items || []).map(mapPayrollFromApi)))
       .catch((err) => notify("Could not load payroll", err instanceof Error ? err.message : "Failed to load payroll", "alert"));
+    apiFetch("/company-profile", authToken)
+      .then((data) => {
+        if (data && Object.keys(data).length) {
+          const profile = mapCompanyProfileFromApi(data);
+          setCompanyProfile(profile);
+          setProfileName(profile.name || PORTAL_NAME);
+        }
+      })
+      .catch((err) => notify("Could not load company settings", err instanceof Error ? err.message : "Failed to load company settings", "alert"));
   }, [authToken]);
 
   const [view, setViewState] = useState<View>(() => viewFromPath(window.location.pathname));
@@ -1498,7 +1517,7 @@ export default function App() {
     if (view === "api") return <ApiSettings config={apiConfig} setConfig={setApiConfig} notify={notify} />;
     if (view === "users") return <UsersSettings profileName={profileName} role={role} authToken={authToken} />;
     if (view === "roles") return <RolesSettings />;
-    if (view === "company") return <CompanySettings profile={companyProfile} setProfile={setCompanyProfile} setProfileName={setProfileName} notify={notify} />;
+    if (view === "company") return <CompanySettings profile={companyProfile} setProfile={setCompanyProfile} setProfileName={setProfileName} authToken={authToken} notify={notify} />;
     return <Settings role={role} setRole={setRole} profileName={profileName} setProfileName={setProfileName} />;
   })();
 
@@ -2534,15 +2553,21 @@ function RolesSettings() {
   </div>;
 }
 
-function CompanySettings({ profile, setProfile, setProfileName, notify }: { profile: CompanyProfile; setProfile: React.Dispatch<React.SetStateAction<CompanyProfile>>; setProfileName: (v: string) => void; notify: (title: string, message: string, type?: string) => void }) {
+function CompanySettings({ profile, setProfile, setProfileName, authToken, notify }: { profile: CompanyProfile; setProfile: React.Dispatch<React.SetStateAction<CompanyProfile>>; setProfileName: (v: string) => void; authToken: string | null; notify: (title: string, message: string, type?: string) => void }) {
   const [draft, setDraft] = useState<CompanyProfile>(profile);
   useEffect(() => setDraft(profile), [profile]);
   const set = <K extends keyof CompanyProfile>(key: K, value: CompanyProfile[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
   const hasChanges = JSON.stringify(draft) !== JSON.stringify(profile);
-  const save = () => {
-    setProfile(draft);
-    setProfileName(draft.name || PORTAL_NAME);
-    notify("Changes saved", "Company settings were saved successfully.");
+  const save = async () => {
+    try {
+      const saved = await apiFetch("/company-profile", authToken, { method: "PUT", body: JSON.stringify(companyProfileToApiPayload(draft)) });
+      const nextProfile = mapCompanyProfileFromApi(saved);
+      setProfile(nextProfile);
+      setProfileName(nextProfile.name || PORTAL_NAME);
+      notify("Changes saved", "Company settings were saved permanently to the database.");
+    } catch (error) {
+      notify("Save failed", error instanceof Error ? error.message : "Company settings could not be saved to the database.", "alert");
+    }
   };
   return <div><Toolbar title="Company" subtitle="Company profile, billing identity and reminder defaults" action={hasChanges ? <button onClick={save} className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]">Save Changes</button> : undefined} />
     <div className="grid md:grid-cols-2 gap-4">

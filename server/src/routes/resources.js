@@ -1,9 +1,31 @@
 import express from "express";
-import { Attendance, AuditLog, BalanceFreight, Customer, DocumentRecord, Driver, Expense, Invoice, Maintenance, Notification, Payment, Payroll, Trip, Vehicle } from "../models/index.js";
+import { Attendance, AuditLog, BalanceFreight, CompanyProfile, Customer, DocumentRecord, Driver, Expense, Invoice, Maintenance, Notification, Payment, Payroll, Trip, Vehicle } from "../models/index.js";
 import { crudController } from "../controllers/crudController.js";
 import { authorize } from "../middleware/auth.js";
 
 const router = express.Router();
+
+// One shared company profile. It is intentionally separate from generic CRUD
+// resources so every admin edits the same permanent business identity.
+router.get("/company-profile", async (req, res, next) => {
+  try {
+    const profile = await CompanyProfile.findOne({ key: "primary" });
+    res.json(profile || {});
+  } catch (error) { next(error); }
+});
+
+router.put("/company-profile", authorize("admin", "manager"), async (req, res, next) => {
+  try {
+    const fields = ["name", "tagline", "gst", "phone", "phone2", "email", "address", "jurisdiction", "pan", "bankName", "bankBranch", "bankAccount", "bankIfsc"];
+    const update = Object.fromEntries(fields.filter((key) => key in req.body).map((key) => [key, req.body[key]]));
+    const profile = await CompanyProfile.findOneAndUpdate(
+      { key: "primary" },
+      { $set: update, $setOnInsert: { key: "primary" } },
+      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+    );
+    res.json(profile);
+  } catch (error) { next(error); }
+});
 
 const resources = {
   vehicles: [Vehicle, {}],

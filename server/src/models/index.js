@@ -300,3 +300,21 @@ export const AuditLog = mongoose.model("AuditLog", new mongoose.Schema({
   entityId: String,
   metadata: mongoose.Schema.Types.Mixed,
 }, { timestamps: true }));
+
+// A singleton business profile shared by the whole portal.
+export const CompanyProfile = mongoose.model("CompanyProfile", new mongoose.Schema({
+  key: { type: String, unique: true, default: "primary" },
+  name: { type: String, default: "SBR Portal" },
+  tagline: String,
+  gst: String,
+  phone: String,
+  phone2: String,
+  email: String,
+  address: String,
+  jurisdiction: String,
+  pan: String,
+  bankName: String,
+  bankBranch: String,
+  bankAccount: String,
+  bankIfsc: String,
+}, { timestamps: true }));
