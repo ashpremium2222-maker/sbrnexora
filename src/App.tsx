@@ -2890,30 +2890,30 @@ function Metric({ title, value, onClick }: { title: string; value: string; onCli
   return <Tag onClick={onClick} className={`rounded-[20px] p-5 bg-white border border-[#E7EEF7] shadow-[0_12px_30px_rgba(15,23,42,0.07)] min-w-0 overflow-hidden text-left w-full ${onClick ? "hover:border-[#C7D6EA] cursor-pointer transition-colors" : ""}`}><p className="text-xs text-[#9CA3AF] uppercase tracking-wider font-bold truncate">{title}</p><p className={`${size} font-extrabold mt-2 text-[#111827] truncate`} title={value}>{value}</p>{onClick && <p className="text-[10px] text-[#9CA3AF] mt-1">Tap to view full details</p>}</Tag>;
 }
 function Save({ onClick }: { onClick: () => void }) { return <button onClick={onClick} className="w-full mt-2 rounded-2xl bg-[#1a1d2e] px-5 py-3 text-sm font-semibold text-white">Save</button>; }
-type ChargeRow = { id: string; name: string; amount: string; custom?: boolean };
-const DEFAULT_CHARGE_NAMES = ["Detention", "Weight Receipt", "Loading Charge", "Unloading Charge", "Warai Charge", "Extra Weight", "Extra Size", "Challan Fine", "St Charge"];
+type ChargeRow = { id: string; name: string; amount: string; remark?: string; custom?: boolean };
+const DEFAULT_CHARGE_NAMES = ["Toll / FASTag", "Fuel", "Fooding", "AdBlue", "Detention", "Weight Receipt", "Loading Charge", "Unloading Charge", "Warai Charge", "Extra Weight", "Extra Size", "Challan Fine", "St Charge"];
 function OtherChargesModal({ initialAmount, initialReason, onApply, onClose }: { initialAmount: string; initialReason: string; onApply: (amount: string, reason: string) => void; onClose: () => void }) {
   const [rows, setRows] = useState<ChargeRow[]>(() => {
-    const base: ChargeRow[] = DEFAULT_CHARGE_NAMES.map((n) => ({ id: uid("chg"), name: n, amount: "" }));
+    const base: ChargeRow[] = DEFAULT_CHARGE_NAMES.map((n) => ({ id: uid("chg"), name: n, amount: "", remark: "" }));
     if (Number(initialAmount || 0) > 0) base.push({ id: uid("chg"), name: initialReason || "Other", amount: initialAmount, custom: true });
     return base;
   });
-  const addCustomRow = () => setRows((r) => [...r, { id: uid("chg"), name: "", amount: "", custom: true }]);
+  const addCustomRow = () => setRows((r) => [...r, { id: uid("chg"), name: "", amount: "", remark: "", custom: true }]);
   const updateRow = (id: string, patch: Partial<ChargeRow>) => setRows((r) => r.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   const removeRow = (id: string) => setRows((r) => r.filter((row) => row.id !== id));
   const total = rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
   const apply = () => {
-    const reasonParts = rows.filter((r) => Number(r.amount || 0) > 0 && r.name.trim()).map((r) => `${r.name}: ${rupees(Number(r.amount || 0))}`);
+    const reasonParts = rows.filter((r) => Number(r.amount || 0) > 0 && r.name.trim()).map((r) => `${r.name}${r.remark?.trim() ? ` (${r.remark.trim()})` : ""}: ${rupees(Number(r.amount || 0))}`);
     onApply(String(total), reasonParts.join("; "));
     onClose();
   };
   return (
     <div className="relative z-20 w-full rounded-3xl p-4 mb-4 border border-white/60 shadow-xl" style={{ ...glass, background: "var(--card)" }}>
       <div className="max-h-[55vh] overflow-y-auto pr-1">
-        <p className="text-lg font-bold mb-1">Other Charges Breakdown</p>
-        <p className="text-xs text-[#9CA3AF] mb-4">Type an amount against any charge. Leave it blank or 0 to skip. All amounts entered add up into a single Other Charges total automatically.</p>
+        <p className="text-lg font-bold mb-1">Trip Expense & Remark Breakdown</p>
+        <p className="text-xs text-[#9CA3AF] mb-4">Add Toll/FASTag, Fuel, Fooding, AdBlue, or any other charge. Add a remark where needed; only entered amounts count toward Other Charges.</p>
         <div className="rounded-2xl overflow-hidden mb-4" style={glassSubtle}>
-          <div className="grid grid-cols-[1fr_110px_28px] gap-2 px-3 py-2 text-xs font-bold text-[#9CA3AF] border-b border-white/60"><span>Name</span><span>Amount</span><span /></div>
+          <div className="grid grid-cols-[1fr_110px_28px] gap-2 px-3 py-2 text-xs font-bold text-[#9CA3AF] border-b border-white/60"><span>Expense</span><span>Amount</span><span /></div>
           {rows.map((row) => (
             <div key={row.id} className="grid grid-cols-[1fr_110px_28px] gap-2 px-3 py-1.5 items-center rounded-lg">
               {row.custom ? (
@@ -2923,6 +2923,8 @@ function OtherChargesModal({ initialAmount, initialReason, onApply, onClose }: {
               )}
               <input type="number" value={row.amount} onWheel={(e) => e.currentTarget.blur()} onChange={(e) => updateRow(row.id, { amount: e.target.value })} placeholder="0" className="rounded-xl border border-white/60 bg-white/70 px-2 py-1.5 text-xs outline-none" />
               {row.custom ? <button onClick={() => removeRow(row.id)} className="w-6 h-6 rounded-lg flex items-center justify-center text-red-600"><X size={12} /></button> : <span />}
+              <input value={row.remark || ""} onChange={(e) => updateRow(row.id, { remark: e.target.value })} placeholder="Remark (optional)" className="col-span-2 rounded-xl border border-white/60 bg-white/70 px-2 py-1.5 text-xs outline-none" />
+              <span />
             </div>
           ))}
         </div>
