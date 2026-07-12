@@ -1116,7 +1116,15 @@ export default function App() {
   const [profileName, setProfileName] = useState(() => localStorage.getItem("sbr-profile-name") || PORTAL_NAME);
   useEffect(() => { localStorage.setItem("sbr-profile-name", profileName || PORTAL_NAME); }, [profileName]);
   const [apiConfig, setApiConfig] = useState<ApiConfig>(seedApiConfig);
-  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(seedCompanyProfile);
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(() => {
+    try {
+      const saved = localStorage.getItem("sbr-company-profile");
+      return saved ? { ...seedCompanyProfile, ...JSON.parse(saved) } : seedCompanyProfile;
+    } catch {
+      return seedCompanyProfile;
+    }
+  });
+  useEffect(() => { localStorage.setItem("sbr-company-profile", JSON.stringify(companyProfile)); }, [companyProfile]);
   const [telemetryLog, setTelemetryLog] = useState<Record<string, TelemetryLogEntry[]>>({});
 
   useEffect(() => {
@@ -2527,28 +2535,35 @@ function RolesSettings() {
 }
 
 function CompanySettings({ profile, setProfile, setProfileName, notify }: { profile: CompanyProfile; setProfile: React.Dispatch<React.SetStateAction<CompanyProfile>>; setProfileName: (v: string) => void; notify: (title: string, message: string, type?: string) => void }) {
-  const set = <K extends keyof CompanyProfile>(key: K, value: CompanyProfile[K]) => setProfile((prev) => ({ ...prev, [key]: value }));
-  const save = () => { setProfileName(profile.name); notify("Company profile saved", "Your company details have been updated."); };
-  return <div><Toolbar title="Company" subtitle="Company profile, billing identity and reminder defaults" action={<button onClick={save} className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]">Save Changes</button>} />
+  const [draft, setDraft] = useState<CompanyProfile>(profile);
+  useEffect(() => setDraft(profile), [profile]);
+  const set = <K extends keyof CompanyProfile>(key: K, value: CompanyProfile[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
+  const hasChanges = JSON.stringify(draft) !== JSON.stringify(profile);
+  const save = () => {
+    setProfile(draft);
+    setProfileName(draft.name || PORTAL_NAME);
+    notify("Changes saved", "Company settings were saved successfully.");
+  };
+  return <div><Toolbar title="Company" subtitle="Company profile, billing identity and reminder defaults" action={hasChanges ? <button onClick={save} className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]">Save Changes</button> : undefined} />
     <div className="grid md:grid-cols-2 gap-4">
       <div className="rounded-2xl p-6" style={glass}>
         <h3 className="font-bold mb-4">Company Profile</h3>
-        <Field label="Company Name" value={profile.name} onChange={(v) => set("name", v)} />
-        <Field label="Tagline" value={profile.tagline || ""} onChange={(v) => set("tagline", v)} />
-        <Field label="GST Number" value={profile.gst} onChange={(v) => set("gst", v.toUpperCase())} />
-        <Field label="Phone" value={profile.phone} onChange={(v) => set("phone", v)} />
-        <Field label="Phone (2)" value={profile.phone2 || ""} onChange={(v) => set("phone2", v)} />
-        <Field label="Email" value={profile.email || ""} onChange={(v) => set("email", v)} />
-        <Field label="Address" value={profile.address} onChange={(v) => set("address", v)} />
-        <Field label="Bill Jurisdiction (City)" value={profile.jurisdiction || ""} onChange={(v) => set("jurisdiction", v)} />
+        <Field label="Company Name" value={draft.name} onChange={(v) => set("name", v)} />
+        <Field label="Tagline" value={draft.tagline || ""} onChange={(v) => set("tagline", v)} />
+        <Field label="GST Number" value={draft.gst} onChange={(v) => set("gst", v.toUpperCase())} />
+        <Field label="Phone" value={draft.phone} onChange={(v) => set("phone", v)} />
+        <Field label="Phone (2)" value={draft.phone2 || ""} onChange={(v) => set("phone2", v)} />
+        <Field label="Email" value={draft.email || ""} onChange={(v) => set("email", v)} />
+        <Field label="Address" value={draft.address} onChange={(v) => set("address", v)} />
+        <Field label="Bill Jurisdiction (City)" value={draft.jurisdiction || ""} onChange={(v) => set("jurisdiction", v)} />
       </div>
       <div className="rounded-2xl p-6" style={glass}>
         <h3 className="font-bold mb-4">Freight Bill - Bank & PAN Details</h3>
-        <Field label="PAN No." value={profile.pan || ""} onChange={(v) => set("pan", v.toUpperCase())} />
-        <Field label="Bank Name" value={profile.bankName || ""} onChange={(v) => set("bankName", v)} />
-        <Field label="Branch" value={profile.bankBranch || ""} onChange={(v) => set("bankBranch", v)} />
-        <Field label="A/C No." value={profile.bankAccount || ""} onChange={(v) => set("bankAccount", v)} />
-        <Field label="IFSC Code" value={profile.bankIfsc || ""} onChange={(v) => set("bankIfsc", v.toUpperCase())} />
+        <Field label="PAN No." value={draft.pan || ""} onChange={(v) => set("pan", v.toUpperCase())} />
+        <Field label="Bank Name" value={draft.bankName || ""} onChange={(v) => set("bankName", v)} />
+        <Field label="Branch" value={draft.bankBranch || ""} onChange={(v) => set("bankBranch", v)} />
+        <Field label="A/C No." value={draft.bankAccount || ""} onChange={(v) => set("bankAccount", v)} />
+        <Field label="IFSC Code" value={draft.bankIfsc || ""} onChange={(v) => set("bankIfsc", v.toUpperCase())} />
       </div>
       <div className="rounded-2xl p-6" style={glass}><h3 className="font-bold mb-4">Reminder Rules</h3>{["Insurance 30 days before expiry", "License 30 days before expiry", "Payment due and overdue alerts", "Maintenance schedule alerts"].map((x) => <label key={x} className="flex items-center gap-3 py-2 text-sm"><input type="checkbox" defaultChecked />{x}</label>)}</div>
     </div>
