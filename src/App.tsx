@@ -2868,8 +2868,8 @@ function OtherChargesModal({ initialAmount, initialReason, onApply, onClose }: {
     onClose();
   };
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: "rgba(15,17,21,0.55)" }} onMouseDown={onClose}>
-      <div className="w-full max-w-lg rounded-3xl p-6 max-h-[85vh] overflow-y-auto" style={{ ...glass, background: "var(--card)" }} onMouseDown={(e) => e.stopPropagation()}>
+    <div className="relative z-20 w-full rounded-3xl p-4 mb-4 border border-white/60 shadow-xl" style={{ ...glass, background: "var(--card)" }}>
+      <div className="max-h-[55vh] overflow-y-auto pr-1">
         <p className="text-lg font-bold mb-1">Other Charges Breakdown</p>
         <p className="text-xs text-[#9CA3AF] mb-4">Type an amount against any charge. Leave it blank or 0 to skip. All amounts entered add up into a single Other Charges total automatically.</p>
         <div className="rounded-2xl overflow-hidden mb-4" style={glassSubtle}>
