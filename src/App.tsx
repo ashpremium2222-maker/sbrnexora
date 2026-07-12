@@ -21,6 +21,7 @@ L.Icon.Default.mergeOptions({
 
 type Role = "admin" | "driver";
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api").replace(/\/$/, "");
+const PORTAL_NAME = "SBR Portal";
 let currentAuthToken: string | null = null;
 
 async function apiFetch(path: string, token: string | null, options: RequestInit = {}) {
@@ -1019,8 +1020,10 @@ function FileField({ label, onFiles, category = "document" }: { label: string; o
 }
 
 export default function App() {
-  const [role, setRole] = useState<Role | null>(() => (localStorage.getItem("sbr-role") as Role) || null);
-  const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem("sbr-token"));
+  // Deliberately start logged out: every fresh visit, including a deep link,
+  // must pass through the login screen before any portal data is shown.
+  const [role, setRole] = useState<Role | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   useEffect(() => { currentAuthToken = authToken; }, [authToken]);
   const [theme, setTheme] = useState<"light" | "dark">(() => (localStorage.getItem("sbr-theme") as "light" | "dark") || "light");
   useEffect(() => {
@@ -1097,7 +1100,8 @@ export default function App() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
-  const [profileName, setProfileName] = useState("Nexora");
+  const [profileName, setProfileName] = useState(() => localStorage.getItem("sbr-profile-name") || PORTAL_NAME);
+  useEffect(() => { localStorage.setItem("sbr-profile-name", profileName || PORTAL_NAME); }, [profileName]);
   const [apiConfig, setApiConfig] = useState<ApiConfig>(seedApiConfig);
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(seedCompanyProfile);
   const [telemetryLog, setTelemetryLog] = useState<Record<string, TelemetryLogEntry[]>>({});
@@ -1294,6 +1298,21 @@ export default function App() {
     notify("Vehicle deleted", `${target.number} was removed from the fleet.`, "alert");
     if (isMongoId(id)) apiFetch(`/vehicles/${id}`, authToken, { method: "DELETE" }).catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Vehicle was not removed from the database.", "alert"));
   }
+  function deleteDriver(id: string) {
+    const target = drivers.find((item) => item.id === id);
+    if (!target || !window.confirm(`Delete driver ${target.name}? This cannot be undone.`)) return;
+    setDrivers((prev) => prev.filter((item) => item.id !== id));
+    setVehicles((prev) => prev.map((item) => item.currentDriverId === id ? { ...item, currentDriverId: undefined } : item));
+    notify("Driver deleted", `${target.name} was removed.`, "alert");
+    if (isMongoId(id)) apiFetch(`/drivers/${id}`, authToken, { method: "DELETE" }).catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Driver was not removed from the database.", "alert"));
+  }
+  function deleteCustomer(id: string) {
+    const target = customers.find((item) => item.id === id);
+    if (!target || !window.confirm(`Delete party ${target.company}? This cannot be undone.`)) return;
+    setCustomers((prev) => prev.filter((item) => item.id !== id));
+    notify("Party deleted", `${target.company} was removed.`, "alert");
+    if (isMongoId(id)) apiFetch(`/customers/${id}`, authToken, { method: "DELETE" }).catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Party was not removed from the database.", "alert"));
+  }
   function saveBalanceFreight() {
     let advances: AdvanceEntry[] = [];
     try { advances = JSON.parse(form.advancesJson || "[]"); } catch { advances = []; }
@@ -1449,14 +1468,14 @@ export default function App() {
     a.click();
   }
 
-  if (!role) return <Login onLogin={(r, token, name) => { setRole(r); setAuthToken(token); setProfileName(name); localStorage.setItem("sbr-role", r); localStorage.setItem("sbr-token", token); setView(r === "driver" ? "trips" : "dashboard"); }} />;
+  if (!role) return <Login onLogin={(r, token) => { setRole(r); setAuthToken(token); setProfileName(PORTAL_NAME); setView(r === "driver" ? "trips" : "dashboard"); }} />;
 
   const page = (() => {
     if (view === "dashboard") return <Dashboard vehicles={vehicles} drivers={drivers} trips={trips} expenses={expenses} invoices={invoices} notes={notes} documents={documents} maintenancePlan={maintenancePlan} balanceFreights={balanceFreights} attendance={attendance} payroll={payroll} lastRefresh={lastRefresh} setView={setView} />;
     if (view === "vehicles") return <Vehicles vehicles={vehicles} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} openModal={openModal} edit={(item) => openModal("vehicle", Object.fromEntries(Object.entries(item).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : String(v)])))} select={(id) => { setSelected(id); openModal("vehicleDetails"); }} remove={deleteVehicle} />;
     if (view === "liveTracking") return <LiveTracking vehicles={vehicles} drivers={drivers} trips={trips} telemetryLog={telemetryLog} />;
-    if (view === "drivers") return <Drivers drivers={drivers} search={search} setSearch={setSearch} openModal={openModal} edit={(item) => openModal("driver", Object.fromEntries(Object.entries(item).filter(([k]) => k !== "documents").map(([k, v]) => [k, String(v)])))} select={(id) => { setSelected(id); openModal("driverDetails"); }} />;
-    if (view === "customers") return <Customers customers={customers} trips={trips} search={search} setSearch={setSearch} openModal={openModal} />;
+    if (view === "drivers") return <DriversWithDelete drivers={drivers} search={search} setSearch={setSearch} openModal={openModal} edit={(item) => openModal("driver", Object.fromEntries(Object.entries(item).filter(([k]) => k !== "documents").map(([k, v]) => [k, String(v)])))} select={(id) => { setSelected(id); openModal("driverDetails"); }} remove={deleteDriver} />;
+    if (view === "customers") return <CustomersWithDelete customers={customers} trips={trips} search={search} setSearch={setSearch} openModal={openModal} remove={deleteCustomer} />;
     if (view === "trips") return <TripsWithView trips={trips} customers={customers} vehicles={vehicles} drivers={drivers} role={role} search={search} setSearch={setSearch} openModal={openModal} updateTripStatus={updateTripStatus} setView={setView} exportCsv={exportCsv} onBill={setBillTripId} edit={(t) => openModal("trip", Object.fromEntries(Object.entries(t).filter(([k]) => k !== "podDocs").map(([k, v]) => [k, String(v ?? "")])))} remove={deleteTrip} onPodUpload={handlePodUpload} onView={setDocPreview} />;
     if (view === "expenses" || view === "fuel") return <Expenses view={view} expenses={expenses} trips={trips} vehicles={vehicles} drivers={drivers} openModal={openModal} exportCsv={exportCsv} />;
     if (view === "maintenance") return <MaintenanceModule records={maintenancePlan} vehicles={vehicles} trips={trips} openModal={openModal} exportCsv={exportCsv} />;
@@ -1962,6 +1981,10 @@ function Vehicles({ vehicles, search, setSearch, filter, setFilter, openModal, e
     </DataCard></div>;
 }
 
+function DriversWithDelete({ drivers, search, setSearch, openModal, edit, select, remove }: { drivers: Driver[]; search: string; setSearch: (v: string) => void; openModal: (m: string) => void; edit: (driver: Driver) => void; select: (id: string) => void; remove: (id: string) => void }) {
+  return <div className="space-y-4"><Drivers drivers={drivers} search={search} setSearch={setSearch} openModal={openModal} edit={edit} select={select} /><DataCard><div className="px-5 py-3 border-b border-[#EEF3F8]"><p className="text-sm font-bold">Driver record actions</p><p className="text-xs text-[#9CA3AF]">Delete a saved driver record when it is no longer required.</p></div>{drivers.map((driver) => <Row key={driver.id}><Avatar text={initials(driver.name)} /><div className="flex-1"><p className="text-sm font-semibold">{driver.name}</p><p className="text-xs text-[#9CA3AF]">{driver.license}</p></div><button onClick={() => remove(driver.id)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white bg-red-600"><Trash2 size={13} />Delete</button></Row>)}</DataCard></div>;
+}
+
 function Drivers({ drivers, search, setSearch, openModal, edit, select }: { drivers: Driver[]; search: string; setSearch: (v: string) => void; openModal: (m: string) => void; edit: (driver: Driver) => void; select: (id: string) => void }) {
   const filtered = drivers.filter((d) => `${d.name} ${d.license} ${d.phone} ${d.aadhaar} ${d.pan}`.toLowerCase().includes(search.toLowerCase()));
   return <div><Toolbar title="Driver Info & Documents" subtitle={`${drivers.filter((d) => d.status === "Active").length} active · ${drivers.filter((d) => d.status === "On Trip").length} on trip`} search={search} setSearch={setSearch} action={<button onClick={() => openModal("driver")} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add Driver</button>} /><DataCard>{filtered.map((d) => <Row key={d.id}><Avatar text={initials(d.name)} /><div className="flex-1"><p className="text-sm font-semibold">{d.name}</p><p className="text-xs text-[#9CA3AF]">{d.phone}</p></div><p className="hidden md:block text-xs font-mono">{d.license}</p><p className={daysUntil(d.licenseExpiry) <= 15 ? "text-xs text-amber-600 font-semibold" : "text-xs"}>{d.licenseExpiry}</p><span className="hidden lg:block text-xs text-[#9CA3AF]">{d.documents.length} docs</span><Badge label={d.status} /><div className="flex gap-2"><button onClick={() => select(d.id)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="Driver Info & Documents" style={glassSubtle}><Eye size={15} /></button><button onClick={() => edit(d)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="Edit" style={glassSubtle}><SettingsIcon size={15} /></button></div></Row>)}</DataCard></div>;
@@ -2000,6 +2023,10 @@ function DriverDetails({ driver, onView, onSelectPayment, onReassignVehicle, onS
       })}
     </DataCard>
   </div>;
+}
+
+function CustomersWithDelete({ customers, trips, search, setSearch, openModal, remove }: { customers: Customer[]; trips: Trip[]; search: string; setSearch: (v: string) => void; openModal: (m: string) => void; remove: (id: string) => void }) {
+  return <div className="space-y-4"><Customers customers={customers} trips={trips} search={search} setSearch={setSearch} openModal={openModal} /><DataCard><div className="px-5 py-3 border-b border-[#EEF3F8]"><p className="text-sm font-bold">Party record actions</p><p className="text-xs text-[#9CA3AF]">Delete a saved party when it is no longer required.</p></div>{customers.map((customer) => <Row key={customer.id}><Avatar text={initials(customer.company)} /><div className="flex-1"><p className="text-sm font-semibold">{customer.company}</p><p className="text-xs text-[#9CA3AF]">{customer.phone}</p></div><button onClick={() => remove(customer.id)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white bg-red-600"><Trash2 size={13} />Delete</button></Row>)}</DataCard></div>;
 }
 
 function Customers({ customers, trips, search, setSearch, openModal }: { customers: Customer[]; trips: Trip[]; search: string; setSearch: (v: string) => void; openModal: (m: string) => void }) {
@@ -2896,10 +2923,6 @@ function InvoicePreview({ invoice, trip, customer }: { invoice?: Invoice; trip?:
   const gst = Math.round(subtotal * 0.18);
   return <div className="rounded-[22px] ring-1 ring-white/70 shadow-xl overflow-hidden" style={glass}><div className="p-6 border-b border-white/50 flex justify-between gap-4"><div><h3 className="text-lg font-bold">Sharma Roadlines Pvt. Ltd.</h3><p className="text-xs text-[#717182]">GSTIN: 27AABCS1429B1Z1</p></div><div className="text-right"><p className="text-2xl font-bold">TAX INVOICE</p><p className="text-xs">{invoice.id}</p><Badge label={invoice.status} /></div></div><div className="p-6 border-b border-white/50"><p className="text-[10px] font-bold text-[#9CA3AF] uppercase">Bill To</p><p className="text-sm font-bold">{customer?.company}</p><p className="text-xs text-[#717182]">{customer?.gst}</p><p className="text-xs text-[#717182]">{customer?.address}</p></div><div className="p-6 text-sm space-y-2"><p className="flex justify-between"><span>Freight Charges - {trip.pickup} to {trip.drop}</span><b>{rupees(subtotal)}</b></p><p className="flex justify-between"><span>CGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between"><span>SGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between border-t border-black/10 pt-3 text-lg"><span>Grand Total</span><b>{rupees(subtotal + gst)}</b></p></div><div className="p-4 flex gap-2"><button onClick={() => window.print()} className="flex-1 rounded-2xl py-2 text-sm font-semibold" style={glassSubtle}><Printer size={14} className="inline mr-1" />Print</button><button className="flex-1 rounded-2xl py-2 text-sm font-semibold text-white bg-[#12151C]"><Send size={14} className="inline mr-1" />Send</button></div></div>;
 }
-
-
-
-
 
 
 
