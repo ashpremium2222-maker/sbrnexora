@@ -518,11 +518,14 @@ const seedApiConfig: ApiConfig = {
   syncLiveLocation: true, syncFuelLevel: true, syncIgnitionGps: true, connected: false, lastSynced: "Never",
 };
 const seedCompanyProfile: CompanyProfile = {
-  name: "Nexora", gst: "27AABCS1429B1Z1", phone: "+91 98100 12345", address: "Mumbai, Maharashtra",
+  name: "SHREE BIROBA ROADLINES", gst: "", phone: "7350005112", address: "Shop No. 03, 5th Floor, Geet Sidhi Commercial, Nr. MNGL Gas Station, Big City Mart Bldg., Moshi, Pune – 412105",
   tagline: "Transport Contractor & Carrying Heavy & ODC Size Consignment Services",
-  phone2: "", email: "", jurisdiction: "Pune",
+  phone2: "7757004694", email: "shreebirobaroadlines1980@gmail.com", jurisdiction: "Pune",
   pan: "", bankName: "", bankBranch: "", bankAccount: "", bankIfsc: "",
 };
+
+// Fixed legal identity printed on every Booking Register freight bill.
+const BOOKING_REGISTER_COMPANY: CompanyProfile = seedCompanyProfile;
 const seedMaintenance: MaintenanceRecord[] = [
   { id: "mnt-1", vehicleId: "veh-4", serviceType: "Brake", serviceCost: 17500, workshop: "Western Fleet Care", mechanic: "A. Shaikh", partsUsed: "Brake liner kit", serviceIntervalKm: 10000, mileageReminderKm: 500, dueDate: "2026-07-05", status: "Due" },
   { id: "mnt-2", vehicleId: "veh-1", serviceType: "Oil Change", serviceCost: 8200, workshop: "Highway Motors", mechanic: "R. Pawar", partsUsed: "Engine oil, filter", serviceIntervalKm: 8000, mileageReminderKm: 700, dueDate: "2026-07-18", status: "Upcoming" },
@@ -740,7 +743,8 @@ function DocumentViewerModal({ doc, onClose }: { doc: ViewableDoc; onClose: () =
     </div>
   );
 }
-function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip: Trip; customer?: Customer; vehicle?: Vehicle; company: CompanyProfile; onClose: () => void }) {
+function FreightBillModal({ trip, customer, vehicle, company: _company, onClose }: { trip: Trip; customer?: Customer; vehicle?: Vehicle; company: CompanyProfile; onClose: () => void }) {
+  const company = BOOKING_REGISTER_COMPANY;
   const advance = trip.advanceAmount ?? 0;
   const detention = trip.otherExpenses ?? 0;
   const amount = trip.freight + detention;
@@ -2891,7 +2895,6 @@ function InvoicePreview({ invoice, trip, customer }: { invoice?: Invoice; trip?:
   const gst = Math.round(subtotal * 0.18);
   return <div className="rounded-[22px] ring-1 ring-white/70 shadow-xl overflow-hidden" style={glass}><div className="p-6 border-b border-white/50 flex justify-between gap-4"><div><h3 className="text-lg font-bold">Sharma Roadlines Pvt. Ltd.</h3><p className="text-xs text-[#717182]">GSTIN: 27AABCS1429B1Z1</p></div><div className="text-right"><p className="text-2xl font-bold">TAX INVOICE</p><p className="text-xs">{invoice.id}</p><Badge label={invoice.status} /></div></div><div className="p-6 border-b border-white/50"><p className="text-[10px] font-bold text-[#9CA3AF] uppercase">Bill To</p><p className="text-sm font-bold">{customer?.company}</p><p className="text-xs text-[#717182]">{customer?.gst}</p><p className="text-xs text-[#717182]">{customer?.address}</p></div><div className="p-6 text-sm space-y-2"><p className="flex justify-between"><span>Freight Charges - {trip.pickup} to {trip.drop}</span><b>{rupees(subtotal)}</b></p><p className="flex justify-between"><span>CGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between"><span>SGST 9%</span><b>{rupees(gst / 2)}</b></p><p className="flex justify-between border-t border-black/10 pt-3 text-lg"><span>Grand Total</span><b>{rupees(subtotal + gst)}</b></p></div><div className="p-4 flex gap-2"><button onClick={() => window.print()} className="flex-1 rounded-2xl py-2 text-sm font-semibold" style={glassSubtle}><Printer size={14} className="inline mr-1" />Print</button><button className="flex-1 rounded-2xl py-2 text-sm font-semibold text-white bg-[#12151C]"><Send size={14} className="inline mr-1" />Send</button></div></div>;
 }
-
 
 
 
