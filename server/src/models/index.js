@@ -151,7 +151,7 @@ export const Expense = mongoose.model("Expense", new mongoose.Schema({
   trip: { type: mongoose.Schema.Types.ObjectId, ref: "Trip" },
   vehicle: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle" },
   driver: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },
-  category: { type: String, enum: ["Fuel", "Toll", "Maintenance", "Salary", "Allowance", "Parking", "Other"], required: true },
+  category: { type: String, required: true, trim: true },
   amount: { type: Number, required: true },
   liters: { type: Number, default: 0 },
   odometerKm: { type: Number, default: 0 },
