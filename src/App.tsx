@@ -840,7 +840,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
               </p>
               <div className="border-t border-[#111827] mt-3 pt-2 grid grid-cols-2 text-xs text-left px-2">
                 <div><p className="font-bold">M/S. : {(customer?.company || trip.customerId || "-").toUpperCase()}</p><p className="mt-1">Add : {customer?.address || ""}</p></div>
-                <div className="text-right"><p><span className="font-semibold">Bill No. :</span> {trip.billNo || "-"}</p><p><span className="font-semibold">Date :</span> {printDate(trip.date)}</p></div>
+                <div className="text-right"><p><span className="font-semibold">Bill No. :</span> {trip.billNo || "-"}</p><p><span className="font-semibold">Date :</span> <span className="font-sans font-bold">{printDate(trip.date)}</span></p></div>
               </div>
               <p className="text-xs border-t border-[#111827] mt-2 pt-2 text-left px-2">We Hereby Submit Our Freight Bill For Transportation Of Your Goods As Under</p>
               <table className="w-full text-[11px] border-collapse mt-1">
@@ -852,7 +852,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
                 <tbody>
                   <tr className="align-top">
                     <td className="border-r border-[#111827] px-1 py-1 text-center">1</td>
-                    <td className="border-r border-[#111827] px-1 py-1 text-center">{printDate(trip.date)}</td>
+                    <td className="border-r border-[#111827] px-1 py-1 text-center font-sans font-bold">{printDate(trip.date)}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.lrNumber || "-"}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{vehicle?.number || "-"}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.pickup}</td>
@@ -958,7 +958,7 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
 
             <div className="border-t border-[#111827] mt-3 pt-2 grid grid-cols-2 text-xs gap-y-1">
               <p><span className="font-semibold">Challan No. :</span> {record.challanNo || "-"}</p>
-              <p className="text-right"><span className="font-semibold">Loading Date :</span> {record.loadingDate}</p>
+              <p className="text-right"><span className="font-semibold">Loading Date :</span> <span className="font-sans font-bold">{record.loadingDate}</span></p>
               <p><span className="font-semibold">Vehicle No. :</span> {record.vehicleNumber}</p>
               <p className="text-right"><span className="font-semibold">Owner Name :-</span> {record.ownerName || vehicle?.ownerName || "-"}</p>
               <p><span className="font-semibold">From :</span> {record.from}</p>
