@@ -344,8 +344,10 @@ export const DocumentRecord = mongoose.model("DocumentRecord", new mongoose.Sche
 }, { timestamps: true }));
 
 export const Maintenance = mongoose.model("Maintenance", new mongoose.Schema({
-  vehicle: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle", required: true },
-  serviceType: { type: String, enum: ["Oil Change", "Tyre", "Battery", "Brake", "Engine", "Suspension", "Electrical", "General Service"], required: true },
+  // Keep service planning usable for a draft or a custom service type. A
+  // vehicle can be linked later, and the entered record must still persist.
+  vehicle: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle", default: undefined },
+  serviceType: { type: String, default: "" },
   serviceCost: { type: Number, default: 0 },
   workshop: String,
   mechanic: String,

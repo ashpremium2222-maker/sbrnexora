@@ -62,8 +62,13 @@ function mapVehicleFromApi(doc: Record<string, unknown>): Vehicle {
     ownerPhone: doc.ownerPhone ? String(doc.ownerPhone) : undefined,
     registrationDate: doc.registrationDate ? String(doc.registrationDate).slice(0, 10) : undefined,
     fitnessExpiry: doc.fitnessExpiry ? String(doc.fitnessExpiry).slice(0, 10) : undefined,
-    currentDriverId: doc.currentDriver ? String(doc.currentDriver) : undefined,
-    driverHistory: [],
+    currentDriverId: doc.currentDriver ? String((doc.currentDriver as Record<string, unknown>)?._id ?? doc.currentDriver) : undefined,
+    driverHistory: ((doc.driverHistory as Record<string, unknown>[]) || []).map((entry) => ({
+      driverId: String((entry.driver as Record<string, unknown>)?._id ?? entry.driver ?? ""),
+      driverName: String(entry.driverName || ""), vehicleId: String(doc._id), vehicleNumber: String(doc.number || ""),
+      assignedAt: entry.assignedAt ? String(entry.assignedAt).slice(0, 10) : "", endedAt: entry.endedAt ? String(entry.endedAt).slice(0, 10) : undefined,
+      reason: String(entry.reason || ""),
+    })),
     billingHistory: (doc.billingHistory as string[]) || [],
     documentHistory: (doc.documentHistory as string[]) || [],
     documents: ((doc.documents as Record<string, unknown>[]) || []).map((d) => ({ id: uid("vdoc"), category: String(d.type || "Other"), fileName: String(d.fileName || ""), dataUrl: d.url ? String(d.url) : undefined })),
@@ -77,6 +82,8 @@ function vehicleToApiPayload(item: Vehicle) {
     registrationDate: item.registrationDate || undefined, status: item.status,
     rcExpiry: item.rcExpiry || undefined, insuranceExpiry: item.insuranceExpiry || undefined,
     permitExpiry: item.permitExpiry || undefined, fitnessExpiry: item.fitnessExpiry || undefined, pucExpiry: item.pucExpiry || undefined,
+    currentDriver: isMongoId(item.currentDriverId) ? item.currentDriverId : undefined,
+    driverHistory: (item.driverHistory ?? []).map((entry) => ({ driver: isMongoId(entry.driverId) ? entry.driverId : undefined, driverName: entry.driverName, assignedAt: entry.assignedAt || undefined, endedAt: entry.endedAt || undefined, reason: entry.reason })),
     documents: (item.documents ?? []).map((d) => ({ type: d.category, fileName: d.fileName, url: d.dataUrl })),
   };
 }
@@ -95,7 +102,7 @@ function mapDriverFromApi(doc: Record<string, unknown>): Driver {
     address: doc.address ? String(doc.address) : undefined,
     emergencyContact: doc.emergencyContact ? String(doc.emergencyContact) : undefined,
     joiningDate: doc.joiningDate ? String(doc.joiningDate).slice(0, 10) : undefined,
-    assignedVehicleId: doc.assignedVehicle ? String(doc.assignedVehicle) : undefined,
+    assignedVehicleId: doc.assignedVehicle ? String((doc.assignedVehicle as Record<string, unknown>)?._id ?? doc.assignedVehicle) : undefined,
     earnings: Number(doc.earnings || 0),
     paymentHistory: [],
     documents: ((doc.documents as Record<string, unknown>[]) || []).map((d) => ({ id: uid("doc"), category: (String(d.type || "Other") as DriverDocument["category"]), fileName: String(d.fileName || ""), dataUrl: d.url ? String(d.url) : undefined })),
@@ -106,7 +113,7 @@ function driverToApiPayload(item: Driver) {
   return {
     name: item.name, phone: item.phone, license: item.license, licenseExpiry: item.licenseExpiry || undefined,
     aadhaar: item.aadhaar, pan: item.pan, address: item.address, emergencyContact: item.emergencyContact,
-    joiningDate: item.joiningDate || undefined, salary: item.salary, status: item.status,
+    joiningDate: item.joiningDate || undefined, assignedVehicle: isMongoId(item.assignedVehicleId) ? item.assignedVehicleId : undefined, salary: item.salary, status: item.status,
     documents: (item.documents ?? []).map((d) => ({ type: d.category, fileName: d.fileName, url: d.dataUrl })),
   };
 }
@@ -1568,6 +1575,7 @@ export default function App() {
     if (!targetVehicle || !driverId) return;
     const newDriver = drivers.find((d) => d.id === driverId);
     const oldDriverId = targetVehicle.currentDriverId;
+    const oldDriver = drivers.find((d) => d.id === oldDriverId);
     if (oldDriverId === driverId) { notify("No change", "That driver is already assigned to this vehicle."); return; }
     setVehicles((prev) => prev.map((v) => {
       if (v.id !== vehicleId) return v;
@@ -1596,6 +1604,13 @@ export default function App() {
       apiFetch(`/drivers/${driverId}`, authToken, { method: "PATCH", body: JSON.stringify(driverToApiPayload({ ...newDriver, assignedVehicleId: vehicleId })) })
         .then((doc) => setDrivers((prev) => prev.map((item) => item.id === driverId ? mapDriverFromApi(doc) : item)))
         .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Driver assignment was not saved to the database.", "alert"));
+    }
+    // A vehicle has one active driver. Clear the former driver's database link
+    // as well, otherwise the UI appears correct only until the next reload.
+    if (oldDriver && oldDriver.id !== driverId && isMongoId(oldDriver.id)) {
+      apiFetch(`/drivers/${oldDriver.id}`, authToken, { method: "PATCH", body: JSON.stringify({ assignedVehicle: null }) })
+        .then((doc) => setDrivers((prev) => prev.map((item) => item.id === oldDriver.id ? mapDriverFromApi(doc) : item)))
+        .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Previous driver assignment could not be cleared.", "alert"));
     }
     notify("Driver reassigned", `${newDriver?.name ?? "Driver"} is now assigned to ${targetVehicle.number}.`, "assignment");
   }
