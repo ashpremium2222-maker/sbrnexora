@@ -803,8 +803,7 @@ function DocumentViewerModal({ doc, onClose }: { doc: ViewableDoc; onClose: () =
     </div>
   );
 }
-function FreightBillModal({ trip, customer, vehicle, company: _company, onClose }: { trip: Trip; customer?: Customer; vehicle?: Vehicle; company: CompanyProfile; onClose: () => void }) {
-  const company = BOOKING_REGISTER_COMPANY;
+function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip: Trip; customer?: Customer; vehicle?: Vehicle; company: CompanyProfile; onClose: () => void }) {
   const advance = trip.advanceAmount ?? 0;
   const detention = trip.otherExpenses ?? 0;
   const amount = trip.freight + detention;
