@@ -808,6 +808,11 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
   const detention = trip.otherExpenses ?? 0;
   const amount = trip.freight + detention;
   const balance = Math.max(amount - advance, 0);
+  const printDate = (value?: string) => {
+    if (!value) return "-";
+    const [year, month, day] = value.slice(0, 10).split("-");
+    return year && month && day ? `${day}-${month}-${year}` : value;
+  };
   return (
     <div className="fixed inset-0 bg-[#1a1d2e]/45 backdrop-blur-sm z-[80] flex items-center justify-center p-4" onMouseDown={onClose}>
       <div className="w-full max-w-3xl max-h-[92vh] rounded-[20px] overflow-hidden flex flex-col bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -831,7 +836,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
               </p>
               <div className="border-t border-[#111827] mt-3 pt-2 grid grid-cols-2 text-xs text-left px-2">
                 <div><p className="font-bold">M/S. : {(customer?.company || trip.customerId || "-").toUpperCase()}</p><p className="mt-1">Add : {customer?.address || ""}</p></div>
-                <div className="text-right"><p><span className="font-semibold">Bill No. :</span> {trip.billNo || trip.id}</p><p><span className="font-semibold">Date :</span> {trip.date}</p></div>
+                <div className="text-right"><p><span className="font-semibold">Bill No. :</span> {trip.billNo || trip.id}</p><p><span className="font-semibold">Date :</span> {printDate(trip.date)}</p></div>
               </div>
               <p className="text-xs border-t border-[#111827] mt-2 pt-2 text-left px-2">We Hereby Submit Our Freight Bill For Transportation Of Your Goods As Under</p>
               <table className="w-full text-[11px] border-collapse mt-1">
@@ -843,7 +848,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
                 <tbody>
                   <tr className="align-top">
                     <td className="border-r border-[#111827] px-1 py-1 text-center">1</td>
-                    <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.date}</td>
+                    <td className="border-r border-[#111827] px-1 py-1 text-center">{printDate(trip.date)}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.lrNumber || "-"}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{vehicle?.number || "-"}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.pickup}</td>
@@ -1634,6 +1639,10 @@ export default function App() {
           .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Vehicle was not saved to the database.", "alert"));
       }} /></Modal>}
       {modal === "driver" && <Modal title={form.id ? "Edit Driver" : "Add Driver"} onClose={() => setModal(null)}><DriverForm form={form} setForm={setForm} vehicles={vehicles} onSave={(docs) => {
+        if (!form.name?.trim() || !form.phone?.trim() || !form.license?.trim()) {
+          notify("Driver not saved", "Full name, mobile number, and driving license number are required.", "alert");
+          return;
+        }
         const existing = drivers.find((x) => x.id === form.id);
         const isNew = !form.id;
         const driverId = form.id || uid("drv");
@@ -1641,34 +1650,33 @@ export default function App() {
         const newVehicleId = form.assignedVehicleId || existing?.assignedVehicleId || "";
         const vehicleChanged = newVehicleId && newVehicleId !== existing?.assignedVehicleId;
         const item: Driver = { id: driverId, name: form.name, phone: form.phone, license: form.license, licenseExpiry: form.licenseExpiry, aadhaar: form.aadhaar, pan: form.pan, address: form.address, emergencyContact: form.emergencyContact, joiningDate: form.joiningDate, assignedVehicleId: newVehicleId || undefined, earnings: Number(form.earnings || existing?.earnings || 0), paymentHistory: existing?.paymentHistory ?? [], status: existing?.status ?? "Active", salary: Number(form.salary || 0), documents: mergedDocs };
-        setDrivers((d) => form.id ? d.map((x) => x.id === form.id ? item : x) : [item, ...d]);
-        if (vehicleChanged) {
-          const targetVehicle = vehicles.find((v) => v.id === newVehicleId);
-          setVehicles((v) => v.map((x) => {
-            if (x.id === newVehicleId) {
-              const closedHistory = (x.driverHistory ?? []).map((h) => (!h.endedAt ? { ...h, endedAt: today } : h));
-              return { ...x, currentDriverId: driverId, driverHistory: [...closedHistory, { driverId, driverName: item.name, vehicleId: x.id, vehicleNumber: x.number, assignedAt: today, reason: existing ? "Reassigned via driver edit" : "Initial assignment" }] };
-            }
-            if (x.id === existing?.assignedVehicleId && x.currentDriverId === driverId) return { ...x, currentDriverId: undefined };
-            return x;
-          }));
-          if (targetVehicle) notify("Vehicle assigned", `${item.name} is now assigned to ${targetVehicle.number}.`, "assignment");
-        }
-        notify(form.id ? "Driver updated" : "Driver added", `${form.name} can now be assigned to trips.`);
-        setModal(null);
         const request = isNew
           ? apiFetch("/drivers", authToken, { method: "POST", body: JSON.stringify(driverToApiPayload(item)) })
           : apiFetch(`/drivers/${form.id}`, authToken, { method: "PATCH", body: JSON.stringify(driverToApiPayload(item)) });
         request
           .then((doc) => {
             const saved = mapDriverFromApi(doc);
-            setDrivers((d) => d.map((x) => x.id === driverId ? { ...saved, assignedVehicleId: item.assignedVehicleId, documents: item.documents } : x));
+            const persisted = { ...saved, assignedVehicleId: item.assignedVehicleId, documents: item.documents };
+            setDrivers((d) => form.id ? d.map((x) => x.id === form.id ? persisted : x) : [persisted, ...d]);
+            if (vehicleChanged) {
+              const targetVehicle = vehicles.find((v) => v.id === newVehicleId);
+              setVehicles((v) => v.map((x) => {
+                if (x.id === newVehicleId) {
+                  const closedHistory = (x.driverHistory ?? []).map((h) => (!h.endedAt ? { ...h, endedAt: today } : h));
+                  return { ...x, currentDriverId: saved.id, driverHistory: [...closedHistory, { driverId: saved.id, driverName: item.name, vehicleId: x.id, vehicleNumber: x.number, assignedAt: today, reason: existing ? "Reassigned via driver edit" : "Initial assignment" }] };
+                }
+                if (x.id === existing?.assignedVehicleId && x.currentDriverId === driverId) return { ...x, currentDriverId: undefined };
+                return x;
+              }));
+              if (targetVehicle) notify("Vehicle assigned", `${item.name} is now assigned to ${targetVehicle.number}.`, "assignment");
+            }
             if (vehicleChanged && /^[0-9a-f]{24}$/i.test(newVehicleId)) {
               apiFetch(`/vehicles/${newVehicleId}`, authToken, { method: "PATCH", body: JSON.stringify({ currentDriver: saved.id }) }).catch(() => {});
             }
+            notify(form.id ? "Driver updated" : "Driver added", `${item.name} was saved to the database.`, "driver");
+            setModal(null);
           })
-          .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Driver was not saved to the database.", "alert"));
-        setModal(null);
+          .catch((err) => notify("Driver not saved", err instanceof Error ? err.message : "The database rejected the driver record. Please correct the details and try again.", "alert"));
       }} /></Modal>}
       {modal === "driverDetails" && selected && driver(selected) && <Modal title="Driver Info & Documents" onClose={() => setModal(null)}><DriverDetails driver={driver(selected) as Driver} onView={setDocPreview} vehicles={vehicles} onSelectPayment={(p) => { setModal(null); setPaymentPreview(p); }} onSelectEarnings={() => { setModal(null); setEarningsDriverId(selected); }} onReassignVehicle={() => { const d = driver(selected) as Driver; setModal(null); openModal("reassignVehicle", { driverId: d.id, vehicleId: d.assignedVehicleId || "", reason: "" }); }} /></Modal>}
       {modal === "customer" && <Modal title={form.id ? "Edit Party" : "Add Party"} onClose={() => setModal(null)}><CustomerForm form={form} setForm={setForm} onSave={() => {
@@ -2133,7 +2141,7 @@ function DriversWithDelete({ drivers, search, setSearch, openModal, edit, select
   return <div className="space-y-4"><Drivers drivers={drivers} search={search} setSearch={setSearch} openModal={openModal} edit={edit} select={select} /><DataCard><div className="px-5 py-3 border-b border-[#EEF3F8]"><p className="text-sm font-bold">Driver record actions</p><p className="text-xs text-[#9CA3AF]">Delete a saved driver record when it is no longer required.</p></div>{drivers.map((driver) => <Row key={driver.id}><Avatar text={initials(driver.name)} /><div className="flex-1"><p className="text-sm font-semibold">{driver.name}</p><p className="text-xs text-[#9CA3AF]">{driver.license}</p></div><button onClick={() => remove(driver.id)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white bg-red-600"><Trash2 size={13} />Delete</button></Row>)}</DataCard></div>;
 }
 
-function Drivers({ drivers, search, setSearch, openModal, edit, select }: { drivers: Driver[]; search: string; setSearch: (v: string) => void; openModal: (m: string) => void; edit: (driver: Driver) => void; select: (id: string) => void }) {
+function Drivers({ drivers, search, setSearch, openModal, edit, select, remove }: { drivers: Driver[]; search: string; setSearch: (v: string) => void; openModal: (m: string) => void; edit: (driver: Driver) => void; select: (id: string) => void; remove?: (id: string) => void }) {
   const filtered = drivers.filter((d) => `${d.name} ${d.license} ${d.phone} ${d.aadhaar} ${d.pan}`.toLowerCase().includes(search.toLowerCase()));
   return <div><Toolbar title="Driver Info & Documents" subtitle={`${drivers.filter((d) => d.status === "Active").length} active · ${drivers.filter((d) => d.status === "On Trip").length} on trip`} search={search} setSearch={setSearch} action={<button onClick={() => openModal("driver")} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add Driver</button>} /><DataCard>{filtered.map((d) => <Row key={d.id}><Avatar text={initials(d.name)} /><div className="flex-1"><p className="text-sm font-semibold">{d.name}</p><p className="text-xs text-[#9CA3AF]">{d.phone}</p></div><p className="hidden md:block text-xs font-mono">{d.license}</p><p className={daysUntil(d.licenseExpiry) <= 15 ? "text-xs text-amber-600 font-semibold" : "text-xs"}>{d.licenseExpiry}</p><span className="hidden lg:block text-xs text-[#9CA3AF]">{d.documents.length} docs</span><Badge label={d.status} /><div className="flex gap-2"><button onClick={() => select(d.id)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="Driver Info & Documents" style={glassSubtle}><Eye size={15} /></button><button onClick={() => edit(d)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="Edit" style={glassSubtle}><SettingsIcon size={15} /></button></div></Row>)}</DataCard></div>;
 }
