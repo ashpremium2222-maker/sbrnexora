@@ -11,6 +11,12 @@ function cleanPayload(payload = {}) {
     if (emptyDate(value) && /(date|expiry)$/i.test(key)) delete result[key];
   }
 
+  // Sparse unique business identifiers must be absent, rather than an empty
+  // string, so operators can save incomplete draft vehicles and drivers.
+  for (const key of ["number", "license"]) {
+    if (typeof result[key] === "string" && !result[key].trim()) delete result[key];
+  }
+
   if (Array.isArray(result.documents)) {
     result.documents = result.documents
       .map((document) => {

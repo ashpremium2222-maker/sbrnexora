@@ -192,10 +192,34 @@ function maintenanceToApiPayload(item: MaintenanceRecord) {
   return { vehicle: isMongoId(item.vehicleId) ? item.vehicleId : undefined, serviceType: item.serviceType, serviceCost: item.serviceCost, workshop: item.workshop, mechanic: item.mechanic, partsUsed: item.partsUsed, serviceIntervalKm: item.serviceIntervalKm, mileageReminderKm: item.mileageReminderKm, dueDate: item.dueDate || undefined, status: item.status };
 }
 
+function mapDocumentFromApi(doc: Record<string, unknown>): DocumentRecord {
+  const vehicle = doc.vehicle as Record<string, unknown> | undefined;
+  const driver = doc.driver as Record<string, unknown> | undefined;
+  const ownerType = doc.ownerType === "Driver" ? "Driver" : "Vehicle";
+  const owner = ownerType === "Driver" ? driver : vehicle;
+  const file = (doc.file as Record<string, unknown>) || {};
+  return {
+    id: String(doc._id), ownerType,
+    ownerId: String(owner?._id ?? (ownerType === "Driver" ? doc.driver : doc.vehicle) ?? ""),
+    ownerName: String(ownerType === "Driver" ? owner?.name ?? "" : owner?.number ?? ""),
+    type: String(doc.type || "Document"), documentNumber: String(doc.documentNumber || ""),
+    issueDate: doc.issueDate ? String(doc.issueDate).slice(0, 10) : "",
+    expiryDate: doc.expiryDate ? String(doc.expiryDate).slice(0, 10) : "",
+    status: (doc.status as DocumentRecord["status"]) || "Valid",
+    fileName: String(file.fileName || ""), dataUrl: file.url ? String(file.url) : undefined,
+  };
+}
+
 function mapBalanceFreightFromApi(doc: Record<string, unknown>): BalanceFreightRecord {
+  const freight = Number(doc.freight || 0);
+  // Legacy rows may have only a commission amount.  Derive its historical
+  // percentage once for display, but never substitute a hard-coded default.
+  const commissionPercent = doc.commissionPercent === undefined || doc.commissionPercent === null
+    ? (freight ? (Number(doc.commission || 0) / freight) * 100 : 0)
+    : Number(doc.commissionPercent || 0);
   return {
     id: String(doc._id), loadingDate: doc.loadingDate ? String(doc.loadingDate).slice(0, 10) : "", vehicleNumber: String(doc.vehicleNumber || ""), from: String(doc.from || ""), to: String(doc.to || ""),
-    freight: Number(doc.freight || 0), advance: Number(doc.advance || 0), commission: Number(doc.commission || 0), otherCharges: Number(doc.otherCharges || 0), hamali: Number(doc.hamali || 0),
+    freight, advance: Number(doc.advance || 0), commission: Number(doc.commission || 0), commissionPercent, otherCharges: Number(doc.otherCharges || 0), hamali: Number(doc.hamali || 0),
     payCharge: Number(doc.payCharge || 0), balance: Number(doc.balance || 0), partyName: String(doc.partyName || ""), paidAmount: Number(doc.advance || 0), chequeNeftNumber: String(doc.chequeNeftNumber || ""),
     bank: String(doc.bank || ""), paymentDate: doc.paymentDate ? String(doc.paymentDate).slice(0, 10) : "", remarks: String(doc.remarks || ""), status: (doc.status as BalanceFreightRecord["status"]) || "Pending",
     freightId: doc.freightId ? String(doc.freightId) : undefined, billNo: doc.billNo ? String(doc.billNo) : undefined, challanNo: doc.challanNo ? String(doc.challanNo) : undefined,
@@ -203,6 +227,10 @@ function mapBalanceFreightFromApi(doc: Record<string, unknown>): BalanceFreightR
     advances: ((doc.advances as Record<string, unknown>[]) || []).map((entry) => ({ date: String(entry.date || "").slice(0, 10), amount: Number(entry.amount || 0), note: String(entry.note || "") })), linkedTrips: (doc.linkedTrips as string[]) || [], invoiceNumber: doc.invoiceNumber ? String(doc.invoiceNumber) : undefined,
     billingDate: doc.billingDate ? String(doc.billingDate).slice(0, 10) : undefined, additionalCharges: Number(doc.additionalCharges || 0), discount: Number(doc.discount || 0), gst: Number(doc.gst || 0),
     finalAmount: Number(doc.finalAmount || 0), dueDate: doc.dueDate ? String(doc.dueDate).slice(0, 10) : undefined, paymentMode: doc.paymentMode ? String(doc.paymentMode) : undefined,
+    partyAdvance: Number(doc.partyAdvance ?? doc.advance ?? 0), driverAdvance: Number(doc.driverAdvance || 0), advanceBalance: Number(doc.advanceBalance ?? 0),
+    otherChargesReason: String(doc.otherChargesReason || ""), extraHeight: Number(doc.extraHeight || 0), weightRecipt: Number(doc.weightRecipt || 0), paymentChg: Number(doc.paymentChg || 0),
+    challanFineChg: Number(doc.challanFineChg || 0), unlodingChg: Number(doc.unlodingChg || 0), extraWeightChg: Number(doc.extraWeightChg || 0), extraWidthChg: Number(doc.extraWidthChg || 0),
+    balancePaymentDate: doc.balancePaymentDate ? String(doc.balancePaymentDate).slice(0, 10) : undefined,
   };
 }
 function balanceFreightToApiPayload(item: BalanceFreightRecord) {
@@ -210,7 +238,10 @@ function balanceFreightToApiPayload(item: BalanceFreightRecord) {
     freightId: item.freightId, billNo: item.billNo, challanNo: item.challanNo, ownerName: item.ownerName, cnNo: item.cnNo, size: item.size, weight: item.weight, rate: item.rate ?? 0,
     advances: item.advances ?? [], linkedTrips: item.linkedTrips ?? [], invoiceNumber: item.invoiceNumber, billingDate: item.billingDate || undefined, loadingDate: item.loadingDate || undefined,
     vehicleNumber: item.vehicleNumber, from: item.from, to: item.to, freight: item.freight, additionalCharges: item.additionalCharges ?? 0, discount: item.discount ?? 0, gst: item.gst ?? 0,
-    finalAmount: item.finalAmount ?? 0, advance: item.advance, commission: item.commission, otherCharges: item.otherCharges, hamali: item.hamali, payCharge: item.payCharge, partyName: item.partyName,
+    finalAmount: item.finalAmount ?? 0, advance: item.advance, partyAdvance: item.partyAdvance ?? item.advance, driverAdvance: item.driverAdvance ?? 0, advanceBalance: item.advanceBalance ?? 0,
+    commissionPercent: item.commissionPercent ?? 0, commission: item.commission, otherCharges: item.otherCharges, otherChargesReason: item.otherChargesReason ?? "", hamali: item.hamali, payCharge: item.payCharge,
+    extraHeight: item.extraHeight ?? 0, weightRecipt: item.weightRecipt ?? 0, paymentChg: item.paymentChg ?? 0, challanFineChg: item.challanFineChg ?? 0,
+    unlodingChg: item.unlodingChg ?? 0, extraWeightChg: item.extraWeightChg ?? 0, extraWidthChg: item.extraWidthChg ?? 0, balancePaymentDate: item.balancePaymentDate || undefined, partyName: item.partyName,
     chequeNeftNumber: item.chequeNeftNumber, bank: item.bank, dueDate: item.dueDate || undefined, paymentMode: item.paymentMode, paymentDate: item.paymentDate || undefined, remarks: item.remarks, status: item.status,
   };
 }
@@ -501,9 +532,8 @@ const vehicleHealthScore = (vehicle: Vehicle, service?: MaintenanceRecord, docDu
   const telemetry = telemetryOf(vehicle);
   return Math.max(35, Math.min(99, 96 - (vehicle.status === "Under Maintenance" ? 24 : 0) - docDue * 8 - (service?.status === "Due" ? 14 : 0) - (telemetry.engineHealth === "Warning" ? 12 : telemetry.engineHealth === "Critical" ? 32 : 0) - (telemetry.batteryVoltage < 11.5 ? 8 : 0) - (telemetry.fuelLevel < 25 ? 4 : 0)));
 };
-const DEFAULT_COMMISSION_PERCENT = 6;
 const calculateBalanceFreight = (record: Omit<BalanceFreightRecord, "balance" | "status"> & { status?: BalanceFreightRecord["status"] }): BalanceFreightRecord => {
-  const commissionPercent = record.commissionPercent ?? DEFAULT_COMMISSION_PERCENT;
+  const commissionPercent = Number(record.commissionPercent ?? 0);
   const commission = Math.round((record.freight * commissionPercent) / 100);
   const advances = record.advances ?? [];
   const advancesTotal = advances.reduce((s, a) => s + (a.amount || 0), 0);
@@ -1140,6 +1170,9 @@ export default function App() {
     apiFetch("/maintenance?limit=200", authToken)
       .then((data) => setMaintenancePlan((data.items || []).map(mapMaintenanceFromApi)))
       .catch((err) => notify("Could not load maintenance", err instanceof Error ? err.message : "Failed to load maintenance", "alert"));
+    apiFetch("/documents?limit=500", authToken)
+      .then((data) => setDocuments((data.items || []).map(mapDocumentFromApi)))
+      .catch((err) => notify("Could not load documents", err instanceof Error ? err.message : "Failed to load documents", "alert"));
     apiFetch("/balanceFreights?limit=200", authToken)
       .then((data) => setBalanceFreights((data.items || []).map(mapBalanceFreightFromApi)))
       .catch((err) => notify("Could not load vehicle register", err instanceof Error ? err.message : "Failed to load vehicle register", "alert"));
@@ -1207,18 +1240,9 @@ export default function App() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
-  const [profileName, setProfileName] = useState(() => localStorage.getItem("sbr-profile-name") || PORTAL_NAME);
-  useEffect(() => { localStorage.setItem("sbr-profile-name", profileName || PORTAL_NAME); }, [profileName]);
+  const [profileName, setProfileName] = useState(PORTAL_NAME);
   const [apiConfig, setApiConfig] = useState<ApiConfig>(seedApiConfig);
-  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(() => {
-    try {
-      const saved = localStorage.getItem("sbr-company-profile");
-      return saved ? { ...seedCompanyProfile, ...JSON.parse(saved) } : seedCompanyProfile;
-    } catch {
-      return seedCompanyProfile;
-    }
-  });
-  useEffect(() => { localStorage.setItem("sbr-company-profile", JSON.stringify(companyProfile)); }, [companyProfile]);
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile>(seedCompanyProfile);
   const [telemetryLog, setTelemetryLog] = useState<Record<string, TelemetryLogEntry[]>>({});
 
   useEffect(() => {
@@ -1299,13 +1323,22 @@ export default function App() {
   function updateTripStatus(id: string, status: TripStatus) {
     const trip = trips.find((t) => t.id === id);
     if (!trip) return;
-    setTrips((prev) => prev.map((t) => t.id === id ? { ...t, status } : t));
+    const updatedTrip = { ...trip, status };
+    setTrips((prev) => prev.map((t) => t.id === id ? updatedTrip : t));
     if (status === "In Transit" || status === "Assigned") {
       markAttendance(trip.driverId, trip.date, "Present", "Auto-marked: vehicle running on trip");
       setVehicles((prev) => prev.map((v) => v.id === trip.vehicleId ? { ...v, status: "On Trip" } : v));
     }
     if (status === "Completed" || status === "Cancelled") {
       setVehicles((prev) => prev.map((v) => v.id === trip.vehicleId ? { ...v, status: "Available" } : v));
+    }
+    if (isMongoId(id)) {
+      apiFetch(`/trips/${id}`, authToken, { method: "PATCH", body: JSON.stringify(tripToApiPayload(updatedTrip)) })
+        .then((doc) => setTrips((prev) => prev.map((item) => item.id === id ? mapTripFromApi(doc) : item)))
+        .catch((err) => {
+          setTrips((prev) => prev.map((item) => item.id === id ? trip : item));
+          notify("Cloud save failed", err instanceof Error ? err.message : "Trip status was not saved to the database.", "alert");
+        });
     }
     notify("Trip status updated", `${id} changed to ${status}.`, "trip");
   }
@@ -1382,7 +1415,12 @@ export default function App() {
       notify("Booking updated", `${form.id} details saved.`, "trip");
       setModal(null);
       if (isMongoId(form.id)) {
-        apiFetch(`/trips/${form.id}`, authToken, { method: "PATCH", body: JSON.stringify(tripToApiPayload(updatedTrip)) }).catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Booking update was not saved.", "alert"));
+        apiFetch(`/trips/${form.id}`, authToken, { method: "PATCH", body: JSON.stringify(tripToApiPayload(updatedTrip)) })
+          .then((doc) => setTrips((prev) => prev.map((trip) => trip.id === form.id ? mapTripFromApi(doc) : trip)))
+          .catch((err) => {
+            setTrips((prev) => prev.map((trip) => trip.id === form.id ? existing : trip));
+            notify("Cloud save failed", err instanceof Error ? err.message : "Booking update was not saved.", "alert");
+          });
       }
       return;
     }
@@ -1395,12 +1433,19 @@ export default function App() {
     setModal(null);
     apiFetch("/trips", authToken, { method: "POST", body: JSON.stringify(tripToApiPayload(newTrip)) })
       .then((doc) => { const saved = mapTripFromApi(doc); setTrips((t) => t.map((x) => x.id === newTrip.id ? { ...saved, lrNumber: newTrip.lrNumber, podDocs: newTrip.podDocs, remarks: newTrip.remarks } : x)); })
-      .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Booking was not saved to the database.", "alert"));
+      .catch((err) => {
+        setTrips((current) => current.filter((trip) => trip.id !== newTrip.id));
+        notify("Cloud save failed", err instanceof Error ? err.message : "Booking was not saved to the database.", "alert");
+      });
   }
   function deleteTrip(id: string) {
+    const target = trips.find((trip) => trip.id === id);
     setTrips((prev) => prev.filter((t) => t.id !== id));
     notify("Booking deleted", `${id} removed from booking register.`, "trip");
-    if (isMongoId(id)) apiFetch(`/trips/${id}`, authToken, { method: "DELETE" }).catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Booking was not removed from the database.", "alert"));
+    if (isMongoId(id)) apiFetch(`/trips/${id}`, authToken, { method: "DELETE" }).catch((err) => {
+      if (target) setTrips((prev) => [target, ...prev]);
+      notify("Cloud delete failed", err instanceof Error ? err.message : "Booking was not removed from the database.", "alert");
+    });
   }
   function deleteVehicle(id: string) {
     const target = vehicles.find((item) => item.id === id);
@@ -1410,7 +1455,10 @@ export default function App() {
     setSelected((current) => current === id ? null : current);
     setModal(null);
     notify("Vehicle deleted", `${target.number} was removed from the fleet.`, "alert");
-    if (isMongoId(id)) apiFetch(`/vehicles/${id}`, authToken, { method: "DELETE" }).catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Vehicle was not removed from the database.", "alert"));
+    if (isMongoId(id)) apiFetch(`/vehicles/${id}`, authToken, { method: "DELETE" }).catch((err) => {
+      setVehicles((prev) => [target, ...prev]);
+      notify("Cloud delete failed", err instanceof Error ? err.message : "Vehicle was not removed from the database.", "alert");
+    });
   }
   function deleteDriver(id: string) {
     const target = drivers.find((item) => item.id === id);
@@ -1418,14 +1466,20 @@ export default function App() {
     setDrivers((prev) => prev.filter((item) => item.id !== id));
     setVehicles((prev) => prev.map((item) => item.currentDriverId === id ? { ...item, currentDriverId: undefined } : item));
     notify("Driver deleted", `${target.name} was removed.`, "alert");
-    if (isMongoId(id)) apiFetch(`/drivers/${id}`, authToken, { method: "DELETE" }).catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Driver was not removed from the database.", "alert"));
+    if (isMongoId(id)) apiFetch(`/drivers/${id}`, authToken, { method: "DELETE" }).catch((err) => {
+      setDrivers((prev) => [target, ...prev]);
+      notify("Cloud delete failed", err instanceof Error ? err.message : "Driver was not removed from the database.", "alert");
+    });
   }
   function deleteCustomer(id: string) {
     const target = customers.find((item) => item.id === id);
     if (!target || !window.confirm(`Delete party ${target.company}? This cannot be undone.`)) return;
     setCustomers((prev) => prev.filter((item) => item.id !== id));
     notify("Party deleted", `${target.company} was removed.`, "alert");
-    if (isMongoId(id)) apiFetch(`/customers/${id}`, authToken, { method: "DELETE" }).catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Party was not removed from the database.", "alert"));
+    if (isMongoId(id)) apiFetch(`/customers/${id}`, authToken, { method: "DELETE" }).catch((err) => {
+      setCustomers((prev) => [target, ...prev]);
+      notify("Cloud delete failed", err instanceof Error ? err.message : "Party was not removed from the database.", "alert");
+    });
   }
   function saveBalanceFreight() {
     let advances: AdvanceEntry[] = [];
@@ -1435,7 +1489,7 @@ export default function App() {
       id: form.id || uid("bfr"), loadingDate: form.loadingDate || today, vehicleNumber: form.vehicleNumber || "",
       size: form.size || "", from: form.from || "", to: form.to || "", freight: Number(form.freight || 0),
       advance: Number(form.partyAdvance || 0), partyAdvance: Number(form.partyAdvance || 0), driverAdvance: Number(form.driverAdvance || 0),
-      commissionPercent: form.commissionPercent !== undefined && form.commissionPercent !== "" ? Number(form.commissionPercent) : DEFAULT_COMMISSION_PERCENT,
+      commissionPercent: Number(form.commissionPercent || 0),
       commission: Number(form.commission || 0), otherCharges: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "",
       hamali: Number(form.hamali || 0), payCharge: Number(form.payCharge || 0), partyName: form.partyName || "", chequeNeftNumber: form.chequeNeftNumber || "",
       paidAmount: Number(form.partyAdvance || 0), bank: form.bank || "", paymentDate: form.paymentDate || "", remarks: form.remarks || "",
@@ -1462,12 +1516,21 @@ export default function App() {
       : apiFetch(`/balanceFreights/${form.id}`, authToken, { method: "PATCH", body: JSON.stringify(balanceFreightToApiPayload(record)) });
     request
       .then((doc) => setBalanceFreights((prev) => prev.map((x) => x.id === record.id ? mapBalanceFreightFromApi(doc) : x)))
-      .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Vehicle register entry was not saved to the database.", "alert"));
+      .catch((err) => {
+        setBalanceFreights((prev) => isNew
+          ? prev.filter((item) => item.id !== record.id)
+          : prev.map((item) => item.id === record.id ? (existing || item) : item));
+        notify("Cloud save failed", err instanceof Error ? err.message : "Vehicle register entry was not saved to the database.", "alert");
+      });
   }
   function deleteBalanceFreight(id: string) {
+    const target = balanceFreights.find((item) => item.id === id);
     setBalanceFreights((prev) => prev.filter((item) => item.id !== id));
     notify("Vehicle register entry deleted", "Vehicle register record removed.", "freight");
-    if (isMongoId(id)) apiFetch(`/balanceFreights/${id}`, authToken, { method: "DELETE" }).catch((err) => notify("Cloud delete failed", err instanceof Error ? err.message : "Record was not removed from the database.", "alert"));
+    if (isMongoId(id)) apiFetch(`/balanceFreights/${id}`, authToken, { method: "DELETE" }).catch((err) => {
+      if (target) setBalanceFreights((prev) => [target, ...prev]);
+      notify("Cloud delete failed", err instanceof Error ? err.message : "Record was not removed from the database.", "alert");
+    });
   }
   function updateBalanceFreightStatus(id: string, status: BalanceFreightRecord["status"]) {
     let updated: BalanceFreightRecord | undefined;
@@ -1519,6 +1582,21 @@ export default function App() {
       if (d.id === oldDriverId && d.assignedVehicleId === vehicleId) return { ...d, assignedVehicleId: "" };
       return d;
     }));
+    if (isMongoId(vehicleId)) {
+      const updatedVehicle = {
+        ...targetVehicle,
+        currentDriverId: driverId,
+        driverHistory: [...(targetVehicle.driverHistory ?? []).map((h) => (!h.endedAt ? { ...h, endedAt: today } : h)), { driverId, driverName: newDriver?.name ?? "Driver", vehicleId: targetVehicle.id, vehicleNumber: targetVehicle.number, assignedAt: today, reason: reason || "Reassigned" }],
+      };
+      apiFetch(`/vehicles/${vehicleId}`, authToken, { method: "PATCH", body: JSON.stringify(vehicleToApiPayload(updatedVehicle)) })
+        .then((doc) => setVehicles((prev) => prev.map((item) => item.id === vehicleId ? mapVehicleFromApi(doc) : item)))
+        .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Vehicle assignment was not saved to the database.", "alert"));
+    }
+    if (isMongoId(driverId) && newDriver) {
+      apiFetch(`/drivers/${driverId}`, authToken, { method: "PATCH", body: JSON.stringify(driverToApiPayload({ ...newDriver, assignedVehicleId: vehicleId })) })
+        .then((doc) => setDrivers((prev) => prev.map((item) => item.id === driverId ? mapDriverFromApi(doc) : item)))
+        .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Driver assignment was not saved to the database.", "alert"));
+    }
     notify("Driver reassigned", `${newDriver?.name ?? "Driver"} is now assigned to ${targetVehicle.number}.`, "assignment");
   }
   function savePayroll() {
@@ -2102,7 +2180,9 @@ function VehicleHealth({ vehicles, maintenancePlan, expenses, documents }: { veh
 function Billing({ invoices, payments, trips, customers, balanceFreights, setInvoiceStatus, openPayment }: { invoices: Invoice[]; payments: Payment[]; trips: Trip[]; customers: Customer[]; balanceFreights: BalanceFreightRecord[]; setInvoiceStatus: (id: string, status: PaymentStatus) => void; openPayment: (invoice: Invoice) => void }) {
   const customer = (id: string) => customers.find((c) => c.id === id);
   const pending = invoices.reduce((s, i) => s + Math.max((i.total ?? 0) - (i.paidAmount ?? 0), 0), 0);
-  const freightCharges = balanceFreights.length ? balanceFreights : [{ id: "demo-freight", vehicleNumber: "MH12AB1234", loadingDate: today, from: "Mumbai", to: "Pune", freight: 42000, advance: 12000, commission: 1800, otherCharges: 0, hamali: 0, payCharge: 0, balance: 28200, partyName: "Sample Customer", paidAmount: 12000, chequeNeftNumber: "", bank: "", paymentDate: "", remarks: "Dummy billing row", status: "Partially Paid" as const }];
+  // Billing must only show records returned by the database; displaying a
+  // sample charge here makes an empty database look like it contains data.
+  const freightCharges = balanceFreights;
   const statusOptions: PaymentStatus[] = ["Pending", "Partial", "Paid", "Overdue"];
   const [tripFilter, setTripFilter] = useState<"All" | "Pending" | "Partial">("All");
   const filteredInvoices = invoices.filter((i) => tripFilter === "All" || i.status === tripFilter);
@@ -2357,9 +2437,9 @@ function BalanceFreightModule({ records, vehicles, search, setSearch, openModal,
   const parties = Array.from(new Set(records.map((r) => r.partyName).filter(Boolean)));
   const vehicleNumbers = Array.from(new Set([...vehicles.map((v) => v.number), ...records.map((r) => r.vehicleNumber)].filter(Boolean)));
   const chooseStatus = (id: string, status: BalanceFreightRecord["status"]) => { updateStatus(id, status); setOpenStatus(null); };
-  return <div><Toolbar title="Vehicle Register" subtitle={`${filtered.length} records for ${month}`} search={search} setSearch={setSearch} filters={<><input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle} /><select value={party} onChange={(e) => setParty(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle}><option>All</option>{parties.map((p) => <option key={p}>{p}</option>)}</select><select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle}><option>All</option>{vehicleNumbers.map((v) => <option key={v}>{v}</option>)}</select><input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="Route" className="rounded-2xl px-4 py-2.5 text-sm outline-none w-36" style={glassSubtle} /></>} action={<><button onClick={() => exportCsv("vehicle-register", filtered.map((r) => ({ challanNo: r.challanNo || r.freightId || r.id, date: r.loadingDate, vehicleNo: r.vehicleNumber, ownerName: r.ownerName ?? "", partyName: r.partyName, cnNo: r.cnNo ?? "", size: r.size ?? "", weight: r.weight ?? "", rate: r.rate ?? 0, from: r.from, to: r.to, freight: r.freight, partyAdvance: r.partyAdvance ?? r.advance, driverAdvance: r.driverAdvance ?? 0, advanceBalance: r.advanceBalance ?? r.advance, commissionPercent: r.commissionPercent ?? DEFAULT_COMMISSION_PERCENT, commission: r.commission, hamali: r.hamali, detention: r.payCharge, otherCharges: r.otherCharges, otherChargesReason: r.otherChargesReason ?? "", netBalance: r.balance, billNo: r.billNo ?? "", remarks: r.remarks })))} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Download size={15} />Export Excel</button><button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Printer size={15} />PDF / Print</button><button onClick={() => setView("freightReport")} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><FileText size={15} />Report</button><button onClick={() => openModal("balanceFreight")} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add Vehicle Register Entry</button></>} />
+  return <div><Toolbar title="Vehicle Register" subtitle={`${filtered.length} records for ${month}`} search={search} setSearch={setSearch} filters={<><input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle} /><select value={party} onChange={(e) => setParty(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle}><option>All</option>{parties.map((p) => <option key={p}>{p}</option>)}</select><select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle}><option>All</option>{vehicleNumbers.map((v) => <option key={v}>{v}</option>)}</select><input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="Route" className="rounded-2xl px-4 py-2.5 text-sm outline-none w-36" style={glassSubtle} /></>} action={<><button onClick={() => exportCsv("vehicle-register", filtered.map((r) => ({ challanNo: r.challanNo || r.freightId || r.id, date: r.loadingDate, vehicleNo: r.vehicleNumber, ownerName: r.ownerName ?? "", partyName: r.partyName, cnNo: r.cnNo ?? "", size: r.size ?? "", weight: r.weight ?? "", rate: r.rate ?? 0, from: r.from, to: r.to, freight: r.freight, partyAdvance: r.partyAdvance ?? r.advance, driverAdvance: r.driverAdvance ?? 0, advanceBalance: r.advanceBalance ?? r.advance, commissionPercent: r.commissionPercent ?? 0, commission: r.commission, hamali: r.hamali, detention: r.payCharge, otherCharges: r.otherCharges, otherChargesReason: r.otherChargesReason ?? "", netBalance: r.balance, billNo: r.billNo ?? "", remarks: r.remarks })))} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Download size={15} />Export Excel</button><button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Printer size={15} />PDF / Print</button><button onClick={() => setView("freightReport")} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><FileText size={15} />Report</button><button onClick={() => openModal("balanceFreight")} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add Vehicle Register Entry</button></>} />
     <div className="grid md:grid-cols-4 gap-4 mb-4"><Metric title="Total Freight" value={rupees(filtered.reduce((s, r) => s + r.freight, 0))} /><Metric title="Advance Collected" value={rupees(filtered.reduce((s, r) => s + (r.paidAmount || r.advance || 0), 0))} /><Metric title="Completed" value={String(filtered.filter((r) => r.status === "Paid").length)} /><Metric title="Pending Balance" value={rupees(filtered.reduce((s, r) => s + r.balance, 0))} /></div>
-    <div className="grid xl:grid-cols-[1fr_360px] gap-4"><DataCard>{filtered.map((r) => <Row key={r.id}><ClipboardList size={18} /><div className="flex-1 min-w-[240px]"><p className="text-sm font-semibold">{r.challanNo || r.invoiceNumber || r.freightId || r.id} - {r.vehicleNumber} - {r.from} to {r.to}</p><p className="text-xs text-[#9CA3AF]">{r.loadingDate} - {r.partyName}{r.size ? ` - ${r.size}` : ""} - Commission {r.commissionPercent ?? DEFAULT_COMMISSION_PERCENT}% - {r.paymentMode || r.bank || "No bank"}</p></div><p className="hidden md:block text-xs">Final {rupees(r.finalAmount ?? r.freight)}</p><p className="text-xs">Freight {rupees(r.freight)}</p><p className="text-xs">Advance {rupees(r.paidAmount || r.advance || 0)}</p><p className="text-sm font-bold">{rupees(r.balance)}</p><div className="relative"><button onClick={() => setOpenStatus(openStatus === r.id ? null : r.id)} className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-white/60 ring-1 ring-white/70"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />{r.status}</button>{openStatus === r.id && <div className="absolute right-0 top-8 z-20 w-40 rounded-2xl p-2 shadow-xl" style={{ ...glass, background: "rgba(255,255,255,0.94)" }}><button onClick={() => chooseStatus(r.id, "Paid")} className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-emerald-50">Paid / Completed</button><button onClick={() => chooseStatus(r.id, "Cancelled")} className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50">Cancel</button></div>}</div><button onClick={() => onChallan(r.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}><Printer size={13} />Challan</button><button onClick={() => edit(r)} className="px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}>Edit</button><button onClick={() => remove(r.id)} className="px-3 py-2 rounded-xl text-xs font-semibold text-white bg-red-600">Delete</button></Row>)}</DataCard><div className="space-y-4"><LedgerSummary title="Party Page" rows={parties.map((p) => { const items = records.filter((r) => r.partyName === p); return { name: p, meta: `${items.length} transactions`, amount: items.reduce((s, r) => s + r.balance, 0) }; })} /><LedgerSummary title="Vehicle Page" rows={vehicleNumbers.map((v) => { const items = records.filter((r) => r.vehicleNumber === v); return { name: v, meta: `${rupees(items.reduce((s, r) => s + r.freight, 0))} earnings`, amount: items.reduce((s, r) => s + r.balance, 0) }; })} /></div></div></div>;
+    <div className="grid xl:grid-cols-[1fr_360px] gap-4"><DataCard>{filtered.map((r) => <Row key={r.id}><ClipboardList size={18} /><div className="flex-1 min-w-[240px]"><p className="text-sm font-semibold">{r.challanNo || r.invoiceNumber || r.freightId || r.id} - {r.vehicleNumber} - {r.from} to {r.to}</p><p className="text-xs text-[#9CA3AF]">{r.loadingDate} - {r.partyName}{r.size ? ` - ${r.size}` : ""} - Commission {r.commissionPercent ?? 0}% - {r.paymentMode || r.bank || "No bank"}</p></div><p className="hidden md:block text-xs">Final {rupees(r.finalAmount ?? r.freight)}</p><p className="text-xs">Freight {rupees(r.freight)}</p><p className="text-xs">Advance {rupees(r.paidAmount || r.advance || 0)}</p><p className="text-sm font-bold">{rupees(r.balance)}</p><div className="relative"><button onClick={() => setOpenStatus(openStatus === r.id ? null : r.id)} className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-white/60 ring-1 ring-white/70"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />{r.status}</button>{openStatus === r.id && <div className="absolute right-0 top-8 z-20 w-40 rounded-2xl p-2 shadow-xl" style={{ ...glass, background: "rgba(255,255,255,0.94)" }}><button onClick={() => chooseStatus(r.id, "Paid")} className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-emerald-50">Paid / Completed</button><button onClick={() => chooseStatus(r.id, "Cancelled")} className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50">Cancel</button></div>}</div><button onClick={() => onChallan(r.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}><Printer size={13} />Challan</button><button onClick={() => edit(r)} className="px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}>Edit</button><button onClick={() => remove(r.id)} className="px-3 py-2 rounded-xl text-xs font-semibold text-white bg-red-600">Delete</button></Row>)}</DataCard><div className="space-y-4"><LedgerSummary title="Party Page" rows={parties.map((p) => { const items = records.filter((r) => r.partyName === p); return { name: p, meta: `${items.length} transactions`, amount: items.reduce((s, r) => s + r.balance, 0) }; })} /><LedgerSummary title="Vehicle Page" rows={vehicleNumbers.map((v) => { const items = records.filter((r) => r.vehicleNumber === v); return { name: v, meta: `${rupees(items.reduce((s, r) => s + r.freight, 0))} earnings`, amount: items.reduce((s, r) => s + r.balance, 0) }; })} /></div></div></div>;
 }
 function LedgerSummary({ title, rows }: { title: string; rows: { name: string; meta: string; amount: number }[] }) {
   return <div className="rounded-2xl p-5" style={glass}><h3 className="font-bold mb-3">{title}</h3><div className="space-y-2">{rows.length ? rows.map((row) => <div key={row.name} className="rounded-xl p-3" style={glassSubtle}><p className="text-sm font-semibold">{row.name}</p><p className="text-xs text-[#9CA3AF]">{row.meta}</p><p className="text-xs font-bold mt-1">Pending {rupees(row.amount)}</p></div>) : <EmptyState label="No history" />}</div></div>;
@@ -2497,7 +2577,7 @@ function FreightRegisterReport({ balanceFreights, exportCsv }: { balanceFreights
     loadingDate: f.loadingDate, vehicle: f.vehicleNumber, party: f.partyName, size: f.size ?? "", weight: f.weight ?? "", rate: f.rate ?? 0, from: f.from, to: f.to,
     freight: f.freight, advanceEntries: (f.advances ?? []).map((a) => `${a.date}:${a.mode}:${a.amount}`).join(" | "),
     partyAdvance: f.partyAdvance ?? f.advance, driverAdvance: f.driverAdvance ?? 0, advanceBalance: f.advanceBalance ?? f.advance,
-    commissionPercent: f.commissionPercent ?? DEFAULT_COMMISSION_PERCENT, commission: f.commission, hamali: f.hamali, detention: f.payCharge,
+    commissionPercent: f.commissionPercent ?? 0, commission: f.commission, hamali: f.hamali, detention: f.payCharge,
     extraHeight: f.extraHeight ?? 0, weightRecipt: f.weightRecipt ?? 0, paymentChg: f.paymentChg ?? 0, challanFineChg: f.challanFineChg ?? 0,
     unlodingChg: f.unlodingChg ?? 0, extraWeightChg: f.extraWeightChg ?? 0, extraWidthChg: f.extraWidthChg ?? 0,
     otherCharges: f.otherCharges, otherChargesReason: f.otherChargesReason ?? "",
@@ -2527,7 +2607,7 @@ function FreightRegisterReport({ balanceFreights, exportCsv }: { balanceFreights
           <DetailField label="Party Advance" value={rupees(f.partyAdvance ?? f.advance)} />
           <DetailField label="Driver Advance" value={rupees(f.driverAdvance ?? 0)} />
           <DetailField label="Balance Advance" value={rupees(f.advanceBalance ?? f.advance)} />
-          <DetailField label="Commission" value={`${rupees(f.commission)} (${f.commissionPercent ?? DEFAULT_COMMISSION_PERCENT}%)`} />
+          <DetailField label="Commission" value={`${rupees(f.commission)} (${f.commissionPercent ?? 0}%)`} />
           <DetailField label="Extra Width" value={rupees(f.extraWidthChg ?? 0)} />
           <DetailField label="Hamali" value={rupees(f.hamali)} />
           <DetailField label="Detention" value={rupees(f.payCharge)} />
@@ -2981,7 +3061,7 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const [showCharges, setShowCharges] = useState(false);
   const freight = Number(form.freight || 0);
-  const commissionPercent = form.commissionPercent === undefined || form.commissionPercent === "" ? DEFAULT_COMMISSION_PERCENT : Number(form.commissionPercent);
+  const commissionPercent = Number(form.commissionPercent || 0);
   const commission = Math.round((freight * commissionPercent) / 100);
   const advances: AdvanceEntry[] = useMemo(() => { try { return JSON.parse(form.advancesJson || "[]"); } catch { return []; } }, [form.advancesJson]);
   const setAdvances = (next: AdvanceEntry[]) => set("advancesJson", JSON.stringify(next));
@@ -3023,7 +3103,7 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
     <Field label="Balance Advance" type="number" value={form.advanceBalance ?? String(totalAdvance - driverAdvance)} onChange={(v) => set("advanceBalance", v)} />
 
     <FormSection title="Commission & Charges" />
-    <Field label="Commission %" type="number" value={form.commissionPercent ?? String(DEFAULT_COMMISSION_PERCENT)} onChange={(v) => set("commissionPercent", v)} />
+    <Field label="Commission %" type="number" value={form.commissionPercent ?? ""} onChange={(v) => set("commissionPercent", v)} />
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Commission (-) ({commissionPercent}% of freight): {rupees(commission)}</div>
     <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]">Other Charges
       <div className="mt-1.5 flex gap-2">

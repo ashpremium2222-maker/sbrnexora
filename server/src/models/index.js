@@ -38,8 +38,10 @@ export const User = mongoose.model("User", new mongoose.Schema({
 }, { timestamps: true }));
 
 export const Vehicle = mongoose.model("Vehicle", new mongoose.Schema({
-  number: { type: String, required: true, unique: true, uppercase: true },
-  model: { type: String, required: true },
+  // These are business fields, not database identity fields.  A draft vehicle
+  // record must be allowed while the operator is still collecting details.
+  number: { type: String, unique: true, sparse: true, uppercase: true, trim: true },
+  model: { type: String, default: "" },
   type: String,
   capacity: String,
   chassisNumber: String,
@@ -68,9 +70,9 @@ export const Vehicle = mongoose.model("Vehicle", new mongoose.Schema({
 }, { timestamps: true }));
 
 export const Driver = mongoose.model("Driver", new mongoose.Schema({
-  name: { type: String, required: true },
-  phone: { type: String, required: true },
-  license: { type: String, required: true, unique: true },
+  name: { type: String, default: "" },
+  phone: { type: String, default: "" },
+  license: { type: String, unique: true, sparse: true, trim: true },
   licenseExpiry: Date,
   aadhaar: String,
   pan: String,
@@ -95,7 +97,7 @@ export const Driver = mongoose.model("Driver", new mongoose.Schema({
 }, { timestamps: true }));
 
 export const Customer = mongoose.model("Customer", new mongoose.Schema({
-  company: { type: String, required: true },
+  company: { type: String, default: "" },
   contact: String,
   phone: String,
   email: String,
@@ -110,8 +112,8 @@ export const Trip = mongoose.model("Trip", new mongoose.Schema({
   customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
   vehicle: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle" },
   driver: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },
-  pickup: { type: String, required: true },
-  drop: { type: String, required: true },
+  pickup: { type: String, default: "" },
+  drop: { type: String, default: "" },
   lrNumber: String,
   cargoName: String,
   materialType: String,
@@ -151,8 +153,8 @@ export const Expense = mongoose.model("Expense", new mongoose.Schema({
   trip: { type: mongoose.Schema.Types.ObjectId, ref: "Trip" },
   vehicle: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle" },
   driver: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },
-  category: { type: String, required: true, trim: true },
-  amount: { type: Number, required: true },
+  category: { type: String, default: "", trim: true },
+  amount: { type: Number, default: 0 },
   liters: { type: Number, default: 0 },
   odometerKm: { type: Number, default: 0 },
   mileage: { type: Number, default: 0 },
@@ -163,20 +165,20 @@ export const Expense = mongoose.model("Expense", new mongoose.Schema({
 
 // Company overhead is deliberately kept separate from trip/fleet expenses.
 export const CompanyExpense = mongoose.model("CompanyExpense", new mongoose.Schema({
-  name: { type: String, required: true, trim: true },
-  amount: { type: Number, required: true, min: 0 },
-  date: { type: Date, required: true },
+  name: { type: String, default: "", trim: true },
+  amount: { type: Number, default: 0, min: 0 },
+  date: { type: Date, default: Date.now },
   note: { type: String, default: "" },
 }, { timestamps: true }));
 
 // Recurring loan/EMI reminder. The client turns this into a bold in-app
 // notification each month until the selected tenure has ended.
 export const EmiReminder = mongoose.model("EmiReminder", new mongoose.Schema({
-  name: { type: String, required: true, trim: true },
-  amount: { type: Number, required: true, min: 0 },
-  dueDay: { type: Number, required: true, min: 1, max: 31 },
-  tenureMonths: { type: Number, required: true, min: 1 },
-  startDate: { type: Date, required: true },
+  name: { type: String, default: "", trim: true },
+  amount: { type: Number, default: 0, min: 0 },
+  dueDay: { type: Number, default: 1, min: 1, max: 31 },
+  tenureMonths: { type: Number, default: 1, min: 1 },
+  startDate: { type: Date, default: Date.now },
   note: { type: String, default: "" },
   status: { type: String, enum: ["Active", "Closed"], default: "Active" },
   // YYYY-MM entries that have been paid. This lets the next month's reminder return.
@@ -226,36 +228,63 @@ const balanceFreightSchema = new mongoose.Schema({
   linkedTrips: [String],
   invoiceNumber: String,
   billingDate: Date,
-  loadingDate: { type: Date, required: true },
-  vehicleNumber: { type: String, required: true, uppercase: true, trim: true },
-  from: { type: String, required: true, trim: true },
-  to: { type: String, required: true, trim: true },
+  loadingDate: { type: Date, default: Date.now },
+  vehicleNumber: { type: String, default: "", uppercase: true, trim: true },
+  from: { type: String, default: "", trim: true },
+  to: { type: String, default: "", trim: true },
   freight: { type: Number, default: 0 },
   additionalCharges: { type: Number, default: 0 },
   discount: { type: Number, default: 0 },
   gst: { type: Number, default: 18 },
   finalAmount: { type: Number, default: 0 },
   advance: { type: Number, default: 0 },
+  partyAdvance: { type: Number, default: 0 },
+  driverAdvance: { type: Number, default: 0 },
+  advanceBalance: { type: Number, default: 0 },
+  // Store the selected percentage itself.  Every calculation and print view
+  // reads this persisted value; no frontend or server fallback percentage.
+  commissionPercent: { type: Number, min: 0 },
   commission: { type: Number, default: 0 },
   otherCharges: { type: Number, default: 0 },
+  otherChargesReason: { type: String, default: "" },
   hamali: { type: Number, default: 0 },
   payCharge: { type: Number, default: 0 },
+  extraHeight: { type: Number, default: 0 },
+  weightRecipt: { type: Number, default: 0 },
+  paymentChg: { type: Number, default: 0 },
+  challanFineChg: { type: Number, default: 0 },
+  unlodingChg: { type: Number, default: 0 },
+  extraWeightChg: { type: Number, default: 0 },
+  extraWidthChg: { type: Number, default: 0 },
   balance: { type: Number, default: 0 },
-  partyName: { type: String, required: true, trim: true },
+  balancePaymentDate: Date,
+  partyName: { type: String, default: "", trim: true },
   chequeNeftNumber: String,
   bank: String,
   dueDate: Date,
   paymentMode: String,
   paymentDate: Date,
   remarks: String,
-  status: { type: String, enum: ["Pending", "Partially Paid", "Paid"], default: "Pending" },
+  status: { type: String, enum: ["Pending", "Partially Paid", "Paid", "Cancelled"], default: "Pending" },
 }, { timestamps: true });
 
 balanceFreightSchema.index({ partyName: "text", vehicleNumber: "text", from: "text", to: "text", chequeNeftNumber: "text", bank: "text", remarks: "text" });
 balanceFreightSchema.pre("validate", function calculateBalanceFreight(next) {
-  if (!this.commission) this.commission = Math.round((this.freight || 0) * 0.02);
-  this.balance = Math.max((this.freight || 0) - (this.advance || 0) - (this.commission || 0) - (this.otherCharges || 0) - (this.hamali || 0) - (this.payCharge || 0), 0);
-  this.status = this.balance === 0 ? "Paid" : (this.advance || this.payCharge || this.paymentDate) ? "Partially Paid" : "Pending";
+  // Preserve the effective percentage for legacy records that only stored a
+  // commission amount, then always calculate from the persisted percentage.
+  if (this.commissionPercent === undefined || this.commissionPercent === null) {
+    this.commissionPercent = this.freight ? ((this.commission || 0) / this.freight) * 100 : 0;
+  }
+  this.commission = Math.round((this.freight || 0) * (this.commissionPercent || 0) / 100);
+  const deductions = (this.commission || 0) + (this.otherCharges || 0) + (this.hamali || 0) + (this.payCharge || 0)
+    + (this.extraHeight || 0) + (this.weightRecipt || 0) + (this.paymentChg || 0) + (this.challanFineChg || 0)
+    + (this.unlodingChg || 0) + (this.extraWeightChg || 0) + (this.extraWidthChg || 0) + (this.discount || 0);
+  this.balance = this.status === "Paid" || this.status === "Cancelled" ? 0 : Math.max((this.freight || 0) - (this.advance || 0) - deductions, 0);
+  // A cancellation is an explicit operator action and must not be silently
+  // converted to Paid just because the balance is zero.
+  if (this.status !== "Cancelled") {
+    this.status = this.balance === 0 ? "Paid" : (this.advance || this.payCharge || this.paymentDate) ? "Partially Paid" : "Pending";
+  }
   next();
 });
 
