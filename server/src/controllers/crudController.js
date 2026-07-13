@@ -62,8 +62,14 @@ export function crudController(Model, { populate = "" } = {}) {
     },
     async update(req, res, next) {
       try {
-        const item = await Model.findByIdAndUpdate(req.params.id, { $set: cleanPayload(req.body) }, { new: true, runValidators: false });
+        // Use document.save() instead of findByIdAndUpdate(). The latter
+        // bypasses schema pre-validate hooks, causing calculated fields (such
+        // as commission and balance) to retain their old values after edits.
+        const item = await Model.findById(req.params.id);
         if (!item) return res.status(404).json({ error: "Not found" });
+        item.set(cleanPayload(req.body));
+        await item.save();
+        if (populate) await item.populate(populate);
         res.json(item);
       } catch (error) { next(error); }
     },
