@@ -1551,24 +1551,29 @@ export default function App() {
   }
   function markAttendance(driverId: string, date: string, status: AttendanceRecord["status"], notes = "") {
     const month = monthKey(date);
-    let record: AttendanceRecord | undefined;
-    let isNew = false;
-    setAttendance((prev) => {
-      const existing = prev.find((item) => item.driverId === driverId && item.date === date);
-      if (existing) { record = { ...existing, status, notes, month }; return prev.map((item) => item === existing ? record! : item); }
-      isNew = true;
-      record = { id: uid("att"), driverId, date, month, status, notes };
-      return [record, ...prev];
-    });
-    if (record && isMongoId(driverId)) {
-      const payload = record;
-      const request = isNew || !isMongoId(payload.id)
-        ? apiFetch("/attendance", authToken, { method: "POST", body: JSON.stringify(attendanceToApiPayload(payload)) })
-        : apiFetch(`/attendance/${payload.id}`, authToken, { method: "PATCH", body: JSON.stringify(attendanceToApiPayload(payload)) });
-      request
-        .then((doc) => { const saved = mapAttendanceFromApi(doc); setAttendance((prev) => prev.map((x) => (x.driverId === driverId && x.date === date) ? saved : x)); })
-        .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Attendance was not saved to the database.", "alert"));
+    const existing = attendance.find((item) => item.driverId === driverId && item.date === date);
+    if (!isMongoId(driverId)) {
+      notify("Attendance not saved", "Save the driver to the database before marking attendance.", "alert");
+      return;
     }
+    const record: AttendanceRecord = { id: existing?.id || uid("att"), driverId, date, month, status, notes };
+    setAttendance((prev) => existing ? prev.map((item) => item.driverId === driverId && item.date === date ? record : item) : [record, ...prev]);
+    apiFetch("/attendance/entry", authToken, { method: "PUT", body: JSON.stringify(attendanceToApiPayload(record)) })
+      .then((doc) => {
+        const saved = mapAttendanceFromApi(doc);
+        setAttendance((prev) => {
+          const withoutCell = prev.filter((item) => !(item.driverId === driverId && item.date === date));
+          return [saved, ...withoutCell];
+        });
+        notify("Attendance saved", `${saved.status} recorded for ${saved.date}.`, "attendance");
+      })
+      .catch((err) => {
+        setAttendance((prev) => {
+          const withoutCell = prev.filter((item) => !(item.driverId === driverId && item.date === date));
+          return existing ? [existing, ...withoutCell] : withoutCell;
+        });
+        notify("Attendance was not saved", err instanceof Error ? err.message : "The database rejected this attendance entry.", "alert");
+      });
   }
   function assignDriverToVehicle(vehicleId: string, driverId: string, reason: string) {
     const targetVehicle = vehicles.find((v) => v.id === vehicleId);

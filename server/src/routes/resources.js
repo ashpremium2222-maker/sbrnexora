@@ -27,21 +27,27 @@ router.put("/company-profile", authorize("admin", "manager"), async (req, res, n
   } catch (error) { next(error); }
 });
 
-// Attendance has one record per driver per date. Upsert prevents a stale UI
-// request from failing with a duplicate-key error and losing the operator's
-// attendance entry after a refresh.
-router.post("/attendance", authorize("admin", "manager"), async (req, res, next) => {
+// Attendance has one record per driver per date. This dedicated upsert is
+// used by the attendance grid for both new and edited cells, so a cell can
+// never depend on an in-memory frontend ID to persist.
+async function upsertAttendance(req, res, next) {
   try {
     const { driver, date, month, status, notes } = req.body;
     if (!driver || !date) return res.status(400).json({ error: "Driver and date are required for attendance." });
+    const [year, calendarMonth, day] = String(date).slice(0, 10).split("-").map(Number);
+    const attendanceDate = new Date(Date.UTC(year, calendarMonth - 1, day));
+    if (!year || !calendarMonth || !day || Number.isNaN(attendanceDate.getTime())) return res.status(400).json({ error: "A valid attendance date is required." });
     const item = await Attendance.findOneAndUpdate(
-      { driver, date: new Date(date) },
-      { $set: { driver, date: new Date(date), month: month || String(date).slice(0, 7), status: status || "Present", notes: notes || "" } },
+      { driver, date: attendanceDate },
+      { $set: { driver, date: attendanceDate, month: month || String(date).slice(0, 7), status: status || "Present", notes: notes || "" } },
       { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
     ).populate("driver");
     res.status(201).json(item);
   } catch (error) { next(error); }
-});
+}
+router.put("/attendance/entry", authorize("admin", "manager"), upsertAttendance);
+// Kept for older deployed frontends until their next refresh/deployment.
+router.post("/attendance", authorize("admin", "manager"), upsertAttendance);
 
 const resources = {
   vehicles: [Vehicle, {}],
