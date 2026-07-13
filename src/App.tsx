@@ -113,6 +113,7 @@ function driverToApiPayload(item: Driver) {
 
 // ---- Generic API-backed persistence helpers (all remaining modules) ----
 const isMongoId = (id?: string) => !!id && /^[0-9a-f]{24}$/i.test(id);
+const nextDocumentNumber = (values: Array<string | undefined>) => String(Math.max(0, ...values.map((value) => Number.parseInt(String(value || ""), 10)).filter(Number.isFinite)) + 1);
 
 function mapCustomerFromApi(doc: Record<string, unknown>): Customer {
   return { id: String(doc._id), company: String(doc.company || ""), contact: String(doc.contact || ""), phone: String(doc.phone || ""), email: String(doc.email || ""), gst: String(doc.gst || ""), address: String(doc.address || ""), creditLimit: Number(doc.creditLimit || 0) };
@@ -197,14 +198,17 @@ function mapBalanceFreightFromApi(doc: Record<string, unknown>): BalanceFreightR
     freight: Number(doc.freight || 0), advance: Number(doc.advance || 0), commission: Number(doc.commission || 0), otherCharges: Number(doc.otherCharges || 0), hamali: Number(doc.hamali || 0),
     payCharge: Number(doc.payCharge || 0), balance: Number(doc.balance || 0), partyName: String(doc.partyName || ""), paidAmount: Number(doc.advance || 0), chequeNeftNumber: String(doc.chequeNeftNumber || ""),
     bank: String(doc.bank || ""), paymentDate: doc.paymentDate ? String(doc.paymentDate).slice(0, 10) : "", remarks: String(doc.remarks || ""), status: (doc.status as BalanceFreightRecord["status"]) || "Pending",
-    freightId: doc.freightId ? String(doc.freightId) : undefined, linkedTrips: (doc.linkedTrips as string[]) || [], invoiceNumber: doc.invoiceNumber ? String(doc.invoiceNumber) : undefined,
+    freightId: doc.freightId ? String(doc.freightId) : undefined, billNo: doc.billNo ? String(doc.billNo) : undefined, challanNo: doc.challanNo ? String(doc.challanNo) : undefined,
+    ownerName: doc.ownerName ? String(doc.ownerName) : undefined, cnNo: doc.cnNo ? String(doc.cnNo) : undefined, size: doc.size ? String(doc.size) : undefined, weight: doc.weight ? String(doc.weight) : undefined, rate: Number(doc.rate || 0),
+    advances: ((doc.advances as Record<string, unknown>[]) || []).map((entry) => ({ date: String(entry.date || "").slice(0, 10), amount: Number(entry.amount || 0), note: String(entry.note || "") })), linkedTrips: (doc.linkedTrips as string[]) || [], invoiceNumber: doc.invoiceNumber ? String(doc.invoiceNumber) : undefined,
     billingDate: doc.billingDate ? String(doc.billingDate).slice(0, 10) : undefined, additionalCharges: Number(doc.additionalCharges || 0), discount: Number(doc.discount || 0), gst: Number(doc.gst || 0),
     finalAmount: Number(doc.finalAmount || 0), dueDate: doc.dueDate ? String(doc.dueDate).slice(0, 10) : undefined, paymentMode: doc.paymentMode ? String(doc.paymentMode) : undefined,
   };
 }
 function balanceFreightToApiPayload(item: BalanceFreightRecord) {
   return {
-    freightId: item.freightId, linkedTrips: item.linkedTrips ?? [], invoiceNumber: item.invoiceNumber, billingDate: item.billingDate || undefined, loadingDate: item.loadingDate || undefined,
+    freightId: item.freightId, billNo: item.billNo, challanNo: item.challanNo, ownerName: item.ownerName, cnNo: item.cnNo, size: item.size, weight: item.weight, rate: item.rate ?? 0,
+    advances: item.advances ?? [], linkedTrips: item.linkedTrips ?? [], invoiceNumber: item.invoiceNumber, billingDate: item.billingDate || undefined, loadingDate: item.loadingDate || undefined,
     vehicleNumber: item.vehicleNumber, from: item.from, to: item.to, freight: item.freight, additionalCharges: item.additionalCharges ?? 0, discount: item.discount ?? 0, gst: item.gst ?? 0,
     finalAmount: item.finalAmount ?? 0, advance: item.advance, commission: item.commission, otherCharges: item.otherCharges, hamali: item.hamali, payCharge: item.payCharge, partyName: item.partyName,
     chequeNeftNumber: item.chequeNeftNumber, bank: item.bank, dueDate: item.dueDate || undefined, paymentMode: item.paymentMode, paymentDate: item.paymentDate || undefined, remarks: item.remarks, status: item.status,
@@ -817,7 +821,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
     <div className="fixed inset-0 bg-[#1a1d2e]/45 backdrop-blur-sm z-[80] flex items-center justify-center p-4" onMouseDown={onClose}>
       <div className="w-full max-w-3xl max-h-[92vh] rounded-[20px] overflow-hidden flex flex-col bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-black/10 no-print">
-          <div><p className="text-sm font-bold">Freight Bill Preview</p><p className="text-xs text-[#9CA3AF]">Bill No. {trip.billNo || trip.id} - {customer?.company}</p></div>
+          <div><p className="text-sm font-bold">Freight Bill Preview</p><p className="text-xs text-[#9CA3AF]">Bill No. {trip.billNo || "-"} - {customer?.company}</p></div>
           <div className="flex items-center gap-2">
             <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Printer size={15} />Print / Save PDF</button>
             <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center bg-black/5"><X size={16} /></button>
@@ -836,7 +840,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
               </p>
               <div className="border-t border-[#111827] mt-3 pt-2 grid grid-cols-2 text-xs text-left px-2">
                 <div><p className="font-bold">M/S. : {(customer?.company || trip.customerId || "-").toUpperCase()}</p><p className="mt-1">Add : {customer?.address || ""}</p></div>
-                <div className="text-right"><p><span className="font-semibold">Bill No. :</span> {trip.billNo || trip.id}</p><p><span className="font-semibold">Date :</span> {printDate(trip.date)}</p></div>
+                <div className="text-right"><p><span className="font-semibold">Bill No. :</span> {trip.billNo || "-"}</p><p><span className="font-semibold">Date :</span> {printDate(trip.date)}</p></div>
               </div>
               <p className="text-xs border-t border-[#111827] mt-2 pt-2 text-left px-2">We Hereby Submit Our Freight Bill For Transportation Of Your Goods As Under</p>
               <table className="w-full text-[11px] border-collapse mt-1">
@@ -932,7 +936,7 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
     <div className="fixed inset-0 bg-[#1a1d2e]/45 backdrop-blur-sm z-[80] flex items-center justify-center p-4" onMouseDown={onClose}>
       <div className="w-full max-w-3xl max-h-[92vh] rounded-[20px] overflow-hidden flex flex-col bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-black/10 no-print">
-          <div><p className="text-sm font-bold">Lorry Hire Challan Preview</p><p className="text-xs text-[#9CA3AF]">Challan No. {record.challanNo || record.freightId || record.id} - {record.vehicleNumber}</p></div>
+          <div><p className="text-sm font-bold">Lorry Hire Challan Preview</p><p className="text-xs text-[#9CA3AF]">Challan No. {record.challanNo || "-"} - {record.vehicleNumber}</p></div>
           <div className="flex items-center gap-2">
             <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Printer size={15} />Print / Save PDF</button>
             <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center bg-black/5"><X size={16} /></button>
@@ -947,7 +951,7 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
             <p className="text-center text-xs">7350005112 / 7757004694 &nbsp; Email - shreebirobaroadlines1980@gmail.com</p>
 
             <div className="border-t border-[#111827] mt-3 pt-2 grid grid-cols-2 text-xs gap-y-1">
-              <p><span className="font-semibold">Challan No. :</span> {record.challanNo || record.freightId || record.id}</p>
+              <p><span className="font-semibold">Challan No. :</span> {record.challanNo || "-"}</p>
               <p className="text-right"><span className="font-semibold">Loading Date :</span> {record.loadingDate}</p>
               <p><span className="font-semibold">Vehicle No. :</span> {record.vehicleNumber}</p>
               <p className="text-right"><span className="font-semibold">Owner Name :-</span> {record.ownerName || vehicle?.ownerName || "-"}</p>
@@ -1248,6 +1252,30 @@ export default function App() {
     if (route && window.location.pathname !== route) window.history.pushState({}, "", route);
   };
 
+  function openFreightBill(id: string) {
+    const record = trips.find((trip) => trip.id === id);
+    if (!record) return;
+    if (!record.billNo) {
+      const updated = { ...record, billNo: nextDocumentNumber(trips.map((trip) => trip.billNo)) };
+      setTrips((items) => items.map((trip) => trip.id === id ? updated : trip));
+      if (isMongoId(id)) apiFetch(`/trips/${id}`, authToken, { method: "PATCH", body: JSON.stringify(tripToApiPayload(updated)) })
+        .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Bill number was not saved.", "alert"));
+    }
+    setBillTripId(id);
+  }
+
+  function openChallan(id: string) {
+    const record = balanceFreights.find((item) => item.id === id);
+    if (!record) return;
+    if (!record.challanNo) {
+      const updated = { ...record, challanNo: nextDocumentNumber(balanceFreights.map((item) => item.challanNo)) };
+      setBalanceFreights((items) => items.map((item) => item.id === id ? updated : item));
+      if (isMongoId(id)) apiFetch(`/balanceFreights/${id}`, authToken, { method: "PATCH", body: JSON.stringify(balanceFreightToApiPayload(updated)) })
+        .catch((err) => notify("Cloud save failed", err instanceof Error ? err.message : "Challan number was not saved.", "alert"));
+    }
+    setChallanRecordId(id);
+  }
+
   function notify(title: string, message: string, type = "system") {
     setNotes((n) => [{ id: uid("note"), title, message, type, read: false, createdAt: today }, ...n]);
   }
@@ -1335,7 +1363,7 @@ export default function App() {
         ...existing,
         customerId: form.customerId || existing.customerId, vehicleId: form.vehicleId || existing.vehicleId,
         pickup: form.pickup ?? existing.pickup, drop: form.drop ?? existing.drop, cargo: form.cargo ?? existing.cargo,
-        size: form.size ?? existing.size, billNo: form.billNo ?? existing.billNo, chNo: form.chNo ?? existing.chNo,
+        size: form.size ?? existing.size, billNo: form.billNo?.trim() || existing.billNo || nextDocumentNumber(trips.map((trip) => trip.billNo)), chNo: form.chNo ?? existing.chNo,
         receivedDate: form.receivedDate ?? existing.receivedDate, date: form.date || existing.date,
         freight: Number(form.freight || 0), advanceAmount: Number(form.advanceAmount || 0), otherExpenses: Number(form.otherCharges || 0),
         otherChargesReason: form.otherChargesReason ?? existing.otherChargesReason,
@@ -1353,7 +1381,7 @@ export default function App() {
       return;
     }
     const assignedDriverId = vehicles.find((v) => v.id === form.vehicleId)?.currentDriverId || form.driverId || "";
-    const newTrip: Trip = { id: uid("TRIP"), lrNumber: uid("LR"), customerId: form.customerId, vehicleId: form.vehicleId, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo || "", chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advanceAmount: Number(form.advanceAmount || 0), tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", expenseRemarks: parseTripExpenseRemarks(form.tripExpenseRemarksJson), invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: podUrls, remarks: form.remarks || "" };
+    const newTrip: Trip = { id: uid("TRIP"), lrNumber: uid("LR"), customerId: form.customerId, vehicleId: form.vehicleId, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo?.trim() || nextDocumentNumber(trips.map((trip) => trip.billNo)), chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advanceAmount: Number(form.advanceAmount || 0), tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", expenseRemarks: parseTripExpenseRemarks(form.tripExpenseRemarksJson), invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: podUrls, remarks: form.remarks || "" };
     setTrips((t) => [newTrip, ...t]);
     setVehicles((v) => v.map((x) => x.id === newTrip.vehicleId ? { ...x, status: "On Trip" } : x));
     if (assignedDriverId) { setDrivers((d) => d.map((x) => x.id === assignedDriverId ? { ...x, status: "On Trip", assignedVehicleId: newTrip.vehicleId } : x)); markAttendance(assignedDriverId, newTrip.date, "Present", `Auto-marked: vehicle ${vehicle(newTrip.vehicleId)?.number ?? ""} running trip ${newTrip.id}`); }
@@ -1396,6 +1424,7 @@ export default function App() {
   function saveBalanceFreight() {
     let advances: AdvanceEntry[] = [];
     try { advances = JSON.parse(form.advancesJson || "[]"); } catch { advances = []; }
+    const existing = form.id ? balanceFreights.find((item) => item.id === form.id) : undefined;
     const record = calculateBalanceFreight({
       id: form.id || uid("bfr"), loadingDate: form.loadingDate || today, vehicleNumber: form.vehicleNumber || "",
       size: form.size || "", from: form.from || "", to: form.to || "", freight: Number(form.freight || 0),
@@ -1404,13 +1433,13 @@ export default function App() {
       commission: Number(form.commission || 0), otherCharges: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "",
       hamali: Number(form.hamali || 0), payCharge: Number(form.payCharge || 0), partyName: form.partyName || "", chequeNeftNumber: form.chequeNeftNumber || "",
       paidAmount: Number(form.partyAdvance || 0), bank: form.bank || "", paymentDate: form.paymentDate || "", remarks: form.remarks || "",
-      billNo: form.billNo || "", freightId: form.id || uid("VR"), linkedTrips: [],
+      billNo: form.billNo?.trim() || existing?.billNo || nextDocumentNumber(balanceFreights.map((item) => item.billNo)), freightId: existing?.freightId || uid("VR"), linkedTrips: existing?.linkedTrips || [],
       invoiceNumber: form.invoiceNumber || "", billingDate: form.billingDate || form.loadingDate || today,
       additionalCharges: 0, discount: Number(form.discount || 0), gst: 0,
       finalAmount: Number(form.freight || 0),
       dueDate: "", paymentMode: form.paymentMode || "Bank Transfer",
       status: (form.status || undefined) as BalanceFreightRecord["status"] | undefined,
-      challanNo: form.challanNo || "", ownerName: form.ownerName || "", cnNo: form.cnNo || "",
+      challanNo: form.challanNo?.trim() || existing?.challanNo || nextDocumentNumber(balanceFreights.map((item) => item.challanNo)), ownerName: form.ownerName || "", cnNo: form.cnNo || "",
       weight: form.weight || "", rate: Number(form.rate || 0), advances,
       extraHeight: Number(form.extraHeight || 0), weightRecipt: Number(form.weightRecipt || 0),
       paymentChg: Number(form.paymentChg || 0), challanFineChg: Number(form.challanFineChg || 0),
@@ -1556,7 +1585,7 @@ export default function App() {
     if (view === "liveTracking") return <LiveTracking vehicles={vehicles} drivers={drivers} trips={trips} telemetryLog={telemetryLog} />;
     if (view === "drivers") return <DriversWithDelete drivers={drivers} search={search} setSearch={setSearch} openModal={openModal} edit={(item) => openModal("driver", Object.fromEntries(Object.entries(item).filter(([k]) => k !== "documents").map(([k, v]) => [k, String(v)])))} select={(id) => { setSelected(id); openModal("driverDetails"); }} remove={deleteDriver} />;
     if (view === "customers") return <CustomersWithDelete customers={customers} trips={trips} search={search} setSearch={setSearch} openModal={openModal} remove={deleteCustomer} />;
-    if (view === "trips") return <TripsWithView trips={trips} customers={customers} vehicles={vehicles} drivers={drivers} role={role} search={search} setSearch={setSearch} openModal={openModal} updateTripStatus={updateTripStatus} setView={setView} exportCsv={exportCsv} onBill={setBillTripId} edit={(t) => openModal("trip", { ...Object.fromEntries(Object.entries(t).filter(([k]) => k !== "podDocs" && k !== "expenseRemarks").map(([k, v]) => [k, String(v ?? "")])), tripExpenseRemarksJson: JSON.stringify(t.expenseRemarks ?? []) })} remove={deleteTrip} onPodUpload={handlePodUpload} onView={setDocPreview} />;
+    if (view === "trips") return <TripsWithView trips={trips} customers={customers} vehicles={vehicles} drivers={drivers} role={role} search={search} setSearch={setSearch} openModal={openModal} updateTripStatus={updateTripStatus} setView={setView} exportCsv={exportCsv} onBill={openFreightBill} edit={(t) => openModal("trip", { ...Object.fromEntries(Object.entries(t).filter(([k]) => k !== "podDocs" && k !== "expenseRemarks").map(([k, v]) => [k, String(v ?? "")])), tripExpenseRemarksJson: JSON.stringify(t.expenseRemarks ?? []) })} remove={deleteTrip} onPodUpload={handlePodUpload} onView={setDocPreview} />;
     if (view === "expenses" || view === "fuel") return <Expenses view={view} expenses={expenses} trips={trips} vehicles={vehicles} drivers={drivers} openModal={openModal} exportCsv={exportCsv} remove={(id) => {
       const record = expenses.find((item) => item.id === id);
       setExpenses((items) => items.filter((item) => item.id !== id));
@@ -1589,7 +1618,7 @@ export default function App() {
     if (view === "vehicleHealth") return <VehicleHealth vehicles={vehicles} maintenancePlan={maintenancePlan} expenses={expenses} documents={documents} />;
     if (view === "documents") return <Documents documents={documents} search={search} setSearch={setSearch} exportCsv={exportCsv} sendReminder={(doc) => notify("Document reminder sent", `${doc.ownerName} ${doc.type} expires on ${doc.expiryDate}.`, "document")} onView={setDocPreview} />;
     if (view === "salary" || view === "payroll") return <PayrollModule drivers={drivers} attendance={attendance} payroll={payroll} openModal={openModal} exportCsv={exportCsv} />;
-    if (view === "balanceFreight") return <BalanceFreightModule records={balanceFreights} vehicles={vehicles} search={search} setSearch={setSearch} openModal={openModal} edit={(record) => openModal("balanceFreight", { ...Object.fromEntries(Object.entries(record).filter(([k]) => k !== "advances" && k !== "linkedTrips").map(([k, v]) => [k, String(v ?? "")])), advancesJson: JSON.stringify(record.advances ?? []) })} remove={deleteBalanceFreight} updateStatus={updateBalanceFreightStatus} exportCsv={exportCsv} setView={setView} onChallan={setChallanRecordId} />;
+    if (view === "balanceFreight") return <BalanceFreightModule records={balanceFreights} vehicles={vehicles} search={search} setSearch={setSearch} openModal={openModal} edit={(record) => openModal("balanceFreight", { ...Object.fromEntries(Object.entries(record).filter(([k]) => k !== "advances" && k !== "linkedTrips").map(([k, v]) => [k, String(v ?? "")])), advancesJson: JSON.stringify(record.advances ?? []) })} remove={deleteBalanceFreight} updateStatus={updateBalanceFreightStatus} exportCsv={exportCsv} setView={setView} onChallan={openChallan} />;
     if (view === "tripReport") return <div><button onClick={() => setView("trips")} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold mb-4" style={glassSubtle}><ChevronRight size={15} className="rotate-180" />Back to Booking Register</button><TripReport trips={trips} expenses={expenses} vehicles={vehicles} drivers={drivers} customers={customers} maintenancePlan={maintenancePlan} exportCsv={exportCsv} /></div>;
     if (view === "freightReport") return <div><button onClick={() => setView("balanceFreight")} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold mb-4" style={glassSubtle}><ChevronRight size={15} className="rotate-180" />Back to Vehicle Register</button><FreightRegisterReport balanceFreights={balanceFreights} exportCsv={exportCsv} /></div>;
     if (view === "attendance") return <AttendanceModule drivers={drivers} records={attendance} markAttendance={markAttendance} exportCsv={exportCsv} select={(id) => { setSelected(id); openModal("driverDetails"); }} />;
@@ -2482,7 +2511,7 @@ function FreightRegisterReport({ balanceFreights, exportCsv }: { balanceFreights
           <Badge label={f.status} />
         </div>
         <div className="p-5 grid md:grid-cols-3 xl:grid-cols-4 gap-3">
-          <DetailField label="Challan No." value={f.challanNo || f.freightId || f.id} />
+          <DetailField label="Challan No." value={f.challanNo || "-"} />
           <DetailField label="Owner Name" value={f.ownerName || "-"} />
           <DetailField label="CN No." value={f.cnNo || "-"} />
           <DetailField label="Weight" value={f.weight || "-"} />
@@ -2871,7 +2900,7 @@ function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record
     <Field label="Advance" type="number" value={form.advanceAmount || ""} onChange={(v) => set("advanceAmount", v)} />
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Balance: {rupees(bookingBalance)}</div>
     <Field label="Received Date" type="date" value={form.receivedDate || ""} onChange={(v) => set("receivedDate", v)} />
-    <Field label="Bill No." value={form.billNo || ""} onChange={(v) => set("billNo", v)} />
+    <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Bill number is assigned automatically in sequence when you save this booking.</div>
     <Field label="Ch. No." value={form.chNo || ""} onChange={(v) => set("chNo", v)} />
     <Field label="Remarks" value={form.remarks || ""} onChange={(v) => set("remarks", v)} />
     <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]">Trip Expense & Remarks
@@ -2960,7 +2989,7 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
   const netBalance = Math.max(freight - totalAdvance - chargesTotal - Number(form.discount || 0), 0);
   return <>
     <FormSection title="Lorry Hire Challan" />
-    <Field label="Challan No." value={form.challanNo || ""} onChange={(v) => set("challanNo", v)} />
+    <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Challan number is assigned automatically in sequence when you save this record.</div>
     <Field label="Date" type="date" value={form.loadingDate || today} onChange={(v) => set("loadingDate", v)} />
     <SelectField label="Vehicle No." value={form.vehicleNumber || ""} onChange={(v) => set("vehicleNumber", v)} options={[{ value: "", label: "Select vehicle" }, ...vehicles.map((v) => ({ value: v.number, label: v.number }))]} allowManual manualPlaceholder="Type vehicle number" />
     <Field label="Owner Name" value={form.ownerName || ""} onChange={(v) => set("ownerName", v)} />
@@ -2999,7 +3028,7 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
     {showCharges && <OtherChargesModal initialAmount={form.otherCharges || ""} initialReason={form.otherChargesReason || ""} onApply={(amount, reason) => { set("otherCharges", amount); set("otherChargesReason", reason); }} onClose={() => setShowCharges(false)} />}
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Total charges (-): {rupees(chargesTotal)}</div>
     <div className="rounded-2xl p-4 mb-4 text-sm font-bold" style={glassSubtle}>Balance: {rupees(netBalance)}</div>
-    <Field label="Bill No." value={form.billNo || ""} onChange={(v) => set("billNo", v)} />
+    <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Bill number is assigned automatically in sequence when you save this record.</div>
     <Field label="Remarks" value={form.remarks || ""} onChange={(v) => set("remarks", v)} />
 
     <FormSection title="Balance Payment" />

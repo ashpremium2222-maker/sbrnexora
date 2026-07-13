@@ -215,6 +215,14 @@ export const Payment = mongoose.model("Payment", new mongoose.Schema({
 
 const balanceFreightSchema = new mongoose.Schema({
   freightId: String,
+  billNo: String,
+  challanNo: String,
+  ownerName: String,
+  cnNo: String,
+  size: String,
+  weight: String,
+  rate: { type: Number, default: 0 },
+  advances: [{ date: Date, amount: Number, note: String }],
   linkedTrips: [String],
   invoiceNumber: String,
   billingDate: Date,
