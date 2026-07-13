@@ -48,6 +48,17 @@ async function upsertAttendance(req, res, next) {
 router.put("/attendance/entry", authorize("admin", "manager"), upsertAttendance);
 // Kept for older deployed frontends until their next refresh/deployment.
 router.post("/attendance", authorize("admin", "manager"), upsertAttendance);
+router.delete("/attendance/entry", authorize("admin", "manager"), async (req, res, next) => {
+  try {
+    const { driver, date } = req.body;
+    if (!driver || !date) return res.status(400).json({ error: "Driver and date are required for attendance." });
+    const [year, calendarMonth, day] = String(date).slice(0, 10).split("-").map(Number);
+    const attendanceDate = new Date(Date.UTC(year, calendarMonth - 1, day));
+    if (!year || !calendarMonth || !day || Number.isNaN(attendanceDate.getTime())) return res.status(400).json({ error: "A valid attendance date is required." });
+    await Attendance.deleteOne({ driver, date: attendanceDate });
+    res.status(204).end();
+  } catch (error) { next(error); }
+});
 
 const resources = {
   vehicles: [Vehicle, {}],
