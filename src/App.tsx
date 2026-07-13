@@ -869,7 +869,13 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
                       {detention > 0 && <p className="text-[10px] mt-1">{trip.otherChargesReason || "Detention"}<br />{detention.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>}
                     </td>
                   </tr>
-                  {Array.from({ length: 6 }).map((_, i) => <tr key={i}><td colSpan={10} className="h-5">&nbsp;</td></tr>)}
+                  {Array.from({ length: 6 }).map((_, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {Array.from({ length: 10 }).map((__, columnIndex) => (
+                        <td key={columnIndex} className={`h-6 ${columnIndex < 9 ? "border-r border-[#111827]" : ""}`}>&nbsp;</td>
+                      ))}
+                    </tr>
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-[#111827]">
