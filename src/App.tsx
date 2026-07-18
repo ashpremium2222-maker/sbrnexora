@@ -231,10 +231,10 @@ function mapBalanceFreightFromApi(doc: Record<string, unknown>): BalanceFreightR
     bank: String(doc.bank || ""), paymentDate: doc.paymentDate ? String(doc.paymentDate).slice(0, 10) : "", remarks: String(doc.remarks || ""), status: (doc.status as BalanceFreightRecord["status"]) || "Pending",
     freightId: doc.freightId ? String(doc.freightId) : undefined, billNo: doc.billNo ? String(doc.billNo) : undefined, challanNo: doc.challanNo ? String(doc.challanNo) : undefined,
     ownerName: doc.ownerName ? String(doc.ownerName) : undefined, cnNo: doc.cnNo ? String(doc.cnNo) : undefined, size: doc.size ? String(doc.size) : undefined, weight: doc.weight ? String(doc.weight) : undefined, rate: Number(doc.rate || 0),
-    advances: ((doc.advances as Record<string, unknown>[]) || []).map((entry) => ({ date: String(entry.date || "").slice(0, 10), amount: Number(entry.amount || 0), note: String(entry.note || "") })), linkedTrips: (doc.linkedTrips as string[]) || [], invoiceNumber: doc.invoiceNumber ? String(doc.invoiceNumber) : undefined,
+    advances: ((doc.advances as Record<string, unknown>[]) || []).map((entry) => ({ date: String(entry.date || "").slice(0, 10), amount: Number(entry.amount || 0), mode: String(entry.mode || entry.note || "Cash") })), linkedTrips: (doc.linkedTrips as string[]) || [], invoiceNumber: doc.invoiceNumber ? String(doc.invoiceNumber) : undefined,
     billingDate: doc.billingDate ? String(doc.billingDate).slice(0, 10) : undefined, additionalCharges: Number(doc.additionalCharges || 0), discount: Number(doc.discount || 0), gst: Number(doc.gst || 0),
     finalAmount: Number(doc.finalAmount || 0), dueDate: doc.dueDate ? String(doc.dueDate).slice(0, 10) : undefined, paymentMode: doc.paymentMode ? String(doc.paymentMode) : undefined,
-    partyAdvance: Number(doc.partyAdvance ?? doc.advance ?? 0), driverAdvance: Number(doc.driverAdvance || 0), advanceBalance: Number(doc.advanceBalance ?? 0),
+    partyAdvance: Number(doc.partyAdvance ?? doc.advance ?? 0), advanceBalance: Number(doc.advanceBalance ?? 0),
     otherChargesReason: String(doc.otherChargesReason || ""), extraHeight: Number(doc.extraHeight || 0), weightRecipt: Number(doc.weightRecipt || 0), paymentChg: Number(doc.paymentChg || 0),
     challanFineChg: Number(doc.challanFineChg || 0), unlodingChg: Number(doc.unlodingChg || 0), extraWeightChg: Number(doc.extraWeightChg || 0), extraWidthChg: Number(doc.extraWidthChg || 0),
     balancePaymentDate: doc.balancePaymentDate ? String(doc.balancePaymentDate).slice(0, 10) : undefined,
@@ -245,7 +245,7 @@ function balanceFreightToApiPayload(item: BalanceFreightRecord) {
     freightId: item.freightId, billNo: item.billNo, challanNo: item.challanNo, ownerName: item.ownerName, cnNo: item.cnNo, size: item.size, weight: item.weight, rate: item.rate ?? 0,
     advances: item.advances ?? [], linkedTrips: item.linkedTrips ?? [], invoiceNumber: item.invoiceNumber, billingDate: item.billingDate || undefined, loadingDate: item.loadingDate || undefined,
     vehicleNumber: item.vehicleNumber, from: item.from, to: item.to, freight: item.freight, additionalCharges: item.additionalCharges ?? 0, discount: item.discount ?? 0, gst: item.gst ?? 0,
-    finalAmount: item.finalAmount ?? 0, advance: item.advance, partyAdvance: item.partyAdvance ?? item.advance, driverAdvance: item.driverAdvance ?? 0, advanceBalance: item.advanceBalance ?? 0,
+    finalAmount: item.finalAmount ?? 0, advance: item.advance, partyAdvance: item.partyAdvance ?? item.advance, advanceBalance: item.advanceBalance ?? 0,
     commissionPercent: item.commissionPercent ?? 0, commission: item.commission, otherCharges: item.otherCharges, otherChargesReason: item.otherChargesReason ?? "", hamali: item.hamali, payCharge: item.payCharge,
     extraHeight: item.extraHeight ?? 0, weightRecipt: item.weightRecipt ?? 0, paymentChg: item.paymentChg ?? 0, challanFineChg: item.challanFineChg ?? 0,
     unlodingChg: item.unlodingChg ?? 0, extraWeightChg: item.extraWeightChg ?? 0, extraWidthChg: item.extraWidthChg ?? 0, balancePaymentDate: item.balancePaymentDate || undefined, partyName: item.partyName,
@@ -352,7 +352,7 @@ type BalanceFreightRecord = {
   commission: number; otherCharges: number; hamali: number; payCharge: number; balance: number; partyName: string;
   paidAmount: number; chequeNeftNumber: string; bank: string; paymentDate: string; remarks: string; status: "Pending" | "Partially Paid" | "Paid" | "Cancelled";
   freightId?: string; linkedTrips?: string[]; invoiceNumber?: string; billingDate?: string; additionalCharges?: number; discount?: number; gst?: number; finalAmount?: number; dueDate?: string; paymentMode?: string;
-  size?: string; partyAdvance?: number; driverAdvance?: number; advanceBalance?: number; commissionPercent?: number; otherChargesReason?: string; billNo?: string;
+  size?: string; partyAdvance?: number; advanceBalance?: number; commissionPercent?: number; otherChargesReason?: string; billNo?: string;
   challanNo?: string; ownerName?: string; cnNo?: string; weight?: string; rate?: number; advances?: AdvanceEntry[];
   extraHeight?: number; weightRecipt?: number; paymentChg?: number; challanFineChg?: number; unlodingChg?: number; extraWeightChg?: number; extraWidthChg?: number; balancePaymentDate?: string;
 };
@@ -543,18 +543,21 @@ const calculateBalanceFreight = (record: Omit<BalanceFreightRecord, "balance" | 
   const commissionPercent = Number(record.commissionPercent ?? 0);
   const commission = Math.round((record.freight * commissionPercent) / 100);
   const advances = record.advances ?? [];
-  const advancesTotal = advances.reduce((s, a) => s + (a.amount || 0), 0);
+  const advancesTotal = advances.reduce((s, a) => s + (Number(a.amount) || 0), 0);
   const partyAdvance = advances.length ? advancesTotal : (record.partyAdvance ?? record.advance ?? 0);
-  const driverAdvance = record.driverAdvance ?? 0;
-  const advanceBalance = record.advanceBalance ?? (partyAdvance - driverAdvance);
-  const deductions = commission + (record.otherCharges || 0) + (record.hamali || 0) + (record.payCharge || 0)
-    + (record.extraHeight || 0) + (record.weightRecipt || 0) + (record.paymentChg || 0) + (record.challanFineChg || 0)
-    + (record.unlodingChg || 0) + (record.extraWeightChg || 0) + (record.extraWidthChg || 0) + (record.discount || 0);
-  const payable = Math.max(record.freight - deductions, 0);
+  // Balance Advance is a separate challan field and is deliberately not
+  // folded into the final-balance calculation.
+  const advanceBalance = Number(record.advanceBalance ?? 0);
+  const deductions = commission + (record.hamali || 0) + (record.paymentChg || 0);
+  const additions = (record.payCharge || 0) + (record.extraHeight || 0) + (record.extraWidthChg || 0)
+    + (record.extraWeightChg || 0) + (record.weightRecipt || 0) + (record.unlodingChg || 0)
+    + (record.challanFineChg || 0) + (record.otherCharges || 0);
+  // This exactly mirrors the original challan: only the three deduction
+  // fields reduce balance; all other listed adjustments are additions.
+  const payable = record.freight - partyAdvance - deductions + additions;
   const status = record.status || (partyAdvance > 0 ? "Partially Paid" : "Pending");
-  const paidAmount = status === "Paid" ? payable : status === "Cancelled" ? partyAdvance : partyAdvance;
-  const balance = status === "Paid" || status === "Cancelled" ? 0 : Math.max(payable - paidAmount, 0);
-  return { ...record, advances, advance: paidAmount, partyAdvance, driverAdvance, advanceBalance, commission, commissionPercent, paidAmount, balance, status };
+  const paidAmount = partyAdvance;
+  return { ...record, advances, advance: partyAdvance, partyAdvance, advanceBalance, commission, commissionPercent, paidAmount, balance: payable, status };
 };
 
 const seedVehicles: Vehicle[] = [
@@ -868,8 +871,8 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
           <div id="freight-bill-printable" className="bg-white w-full max-w-[720px] p-8 text-[#111827]" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
             <p className="text-center text-[10px] tracking-wide mb-2">Subject to {company.jurisdiction || "Pune"} Jurisdiction</p>
             <div className="text-center border-2 border-[#111827] rounded-md px-4 pt-4 pb-3">
-              <h1 className="text-3xl font-bold tracking-wide" style={{ letterSpacing: "1px" }}>{company.name.toUpperCase()}</h1>
-              {company.tagline && <p className="text-xs italic mt-1">{company.tagline}</p>}
+              <h1 className="text-3xl font-bold tracking-wide text-[#F97316]" style={{ letterSpacing: "1px" }}>SHREE BIROBA ROADLINES</h1>
+              <p className="text-xs mt-1" style={{ fontFamily: "Roboto, Arial, sans-serif", fontWeight: 700 }}>Transport Contractor & Carrying Heavy & ODC Size Consignment Services</p>
               <p className="text-xs mt-1">{company.address}</p>
               <p className="text-xs">
                 {[company.phone, company.phone2].filter(Boolean).join(" / ")}
@@ -957,7 +960,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
 }
 function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFreightRecord; vehicle?: Vehicle; company: CompanyProfile; onClose: () => void }) {
   const advances = record.advances ?? [];
-  const totalAdvance = advances.reduce((s, a) => s + (a.amount || 0), 0);
+  const totalAdvance = advances.length ? advances.reduce((s, a) => s + (a.amount || 0), 0) : (record.partyAdvance ?? record.advance ?? 0);
   const chargesLeft = [
     ["Commission (-)", record.commission || 0],
     ["Extra Height", record.extraHeight || 0],
@@ -973,8 +976,12 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
     ["UnlodingChg", record.unlodingChg || 0],
     ["Extra Weight", record.extraWeightChg || 0],
   ] as const;
-  const chargesTotal = chargesLeft.reduce((s, [, v]) => s + v, 0) + chargesRight.reduce((s, [, v]) => s + v, 0);
-  const balance = record.freight - totalAdvance - chargesTotal - (record.discount || 0);
+  const deductions = (record.commission || 0) + (record.hamali || 0) + (record.paymentChg || 0);
+  const additions = (record.payCharge || 0) + (record.extraHeight || 0) + (record.extraWidthChg || 0)
+    + (record.extraWeightChg || 0) + (record.weightRecipt || 0) + (record.unlodingChg || 0)
+    + (record.challanFineChg || 0) + (record.otherCharges || 0);
+  const totalAdjustment = additions - deductions;
+  const balance = record.freight - totalAdvance + totalAdjustment;
   return (
     <div className="fixed inset-0 bg-[#1a1d2e]/45 backdrop-blur-sm z-[80] flex items-center justify-center p-4" onMouseDown={onClose}>
       <div className="w-full max-w-3xl max-h-[92vh] rounded-[20px] overflow-hidden flex flex-col bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -988,8 +995,8 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
         <div className="flex-1 overflow-auto bg-[#0B111C]/5 p-4 flex justify-center">
           <div id="challan-printable" className="bg-white w-full max-w-[720px] p-6 text-[#111827] border-2 border-[#111827] rounded-md" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
             <p className="text-center text-[10px] font-bold tracking-wide">LORRY HIRE CHALLAN</p>
-            <h1 className="text-center text-2xl font-bold tracking-wide mt-1">SHREE BIROBA ROADLINES</h1>
-            <p className="text-center text-[10px] italic mt-1">Transport Contractor & Carrying Heavy & ODC Size Consignment Services</p>
+            <h1 className="text-center text-2xl font-bold tracking-wide mt-1 text-[#F97316]">SHREE BIROBA ROADLINES</h1>
+            <p className="text-center text-[10px] mt-1" style={{ fontFamily: "Roboto, Arial, sans-serif", fontWeight: 700 }}>Transport Contractor & Carrying Heavy & ODC Size Consignment Services</p>
             <p className="text-center text-xs mt-1">Shop No-03, 5th Floor, Geet Sidhi Commercial, Nr MNGL Gas Station, Big City Mart Bldg, Moshi, Pune - 412105</p>
             <p className="text-center text-xs">7350005112 / 7757004694 &nbsp; Email - shreebirobaroadlines1980@gmail.com</p>
 
@@ -1012,17 +1019,18 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
                 <tr>
                   <td className="align-top border-r border-[#111827] w-1/3 p-2">
                     <p className="font-semibold">Size</p><p>{record.size || "-"}</p>
-                    <p className="font-semibold mt-3">Balance Advance</p><p>{(record.advanceBalance ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                    <p className="font-semibold mt-3">Balance Advance</p><p>{(record.advanceBalance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
                   </td>
                   <td className="align-top p-2">
                     <p className="font-semibold text-center border-b border-[#111827] pb-1 mb-1">Advance Details</p>
                     <table className="w-full text-[10px]">
+                      <thead><tr className="border-b border-[#111827]"><th className="py-0.5 text-left font-semibold">Date</th><th className="py-0.5 text-left font-semibold">Description</th><th className="py-0.5 text-right font-semibold">Amount</th></tr></thead>
                       <tbody>
                         {advances.length ? advances.map((a, i) => <tr key={i}><td className="pr-2 py-0.5">{a.date}</td><td className="pr-2 py-0.5">{a.mode}</td><td className="text-right py-0.5">{a.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>) : <tr><td colSpan={3} className="py-1 text-[#9CA3AF]">No advance entries</td></tr>}
                       </tbody>
                     </table>
                     <div className="border-t border-[#111827] mt-2 pt-1 flex justify-between"><span className="font-semibold">Total Advance</span><span>{totalAdvance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>
-                    <div className="flex justify-between"><span className="font-semibold">Extra</span><span>{(-chargesTotal).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>
+                    <div className="flex justify-between"><span className="font-semibold">Extra</span><span>{totalAdjustment.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>
                     <div className="flex justify-between"><span className="font-semibold">Balance</span><span>{balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>
                   </td>
                 </tr>
@@ -1032,7 +1040,7 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
             <table className="w-full text-[11px] border-collapse border-t border-[#111827] mt-2">
               <tbody>
                 {chargesLeft.map(([label, value], i) => <tr key={label}><td className="border-r border-[#111827] px-2 py-1 w-1/4">{label}</td><td className="border-r border-[#111827] px-2 py-1 text-right w-1/4">{value.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="border-r border-[#111827] px-2 py-1 w-1/4">{chargesRight[i]?.[0] ?? ""}</td><td className="px-2 py-1 text-right w-1/4">{chargesRight[i] ? chargesRight[i][1].toLocaleString("en-IN", { minimumFractionDigits: 2 }) : ""}</td></tr>)}
-                <tr className="border-t border-[#111827] font-semibold"><td colSpan={3} className="px-2 py-1 text-right">Total:</td><td className="px-2 py-1 text-right">{(-chargesTotal).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
+                <tr className="border-t border-[#111827] font-semibold"><td colSpan={3} className="px-2 py-1 text-right">Total Adjustment:</td><td className="px-2 py-1 text-right">{totalAdjustment.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
               </tbody>
             </table>
 
@@ -1089,6 +1097,20 @@ function SelectField({ label, value, onChange, options, allowManual = false, man
       )}
     </label>
   );
+}
+function VehicleSearchField({ label = "Vehicle No.", value, onChange, vehicles, valueKind }: { label?: string; value: string; onChange: (value: string) => void; vehicles: Vehicle[]; valueKind: "id" | "number" }) {
+  const selected = vehicles.find((vehicle) => (valueKind === "id" ? vehicle.id : vehicle.number) === value);
+  const [query, setQuery] = useState(selected?.number ?? value ?? "");
+  const normalized = query.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const matches = vehicles.filter((vehicle) => vehicle.number.replace(/[^a-z0-9]/gi, "").toLowerCase().includes(normalized)).slice(0, 8);
+  const choose = (vehicle: Vehicle) => { setQuery(vehicle.number); onChange(valueKind === "id" ? vehicle.id : vehicle.number); };
+  return <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]">
+    <span>{label}</span>
+    <div className="relative mt-1.5">
+      <input value={query} onChange={(event) => { const next = event.target.value.toUpperCase(); setQuery(next); const exact = vehicles.find((vehicle) => vehicle.number.toLowerCase() === next.toLowerCase()); onChange(exact ? (valueKind === "id" ? exact.id : exact.number) : valueKind === "number" ? next : ""); }} placeholder="Type vehicle number, e.g. MH12 or 12" className="w-full rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1a1d2e]/10" />
+      {query && !selected && matches.length > 0 && <div className="absolute z-30 mt-1 w-full max-h-48 overflow-auto rounded-2xl border border-white/70 bg-white shadow-xl p-1">{matches.map((vehicle) => <button key={vehicle.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(vehicle)} className="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-100"><b>{vehicle.number}</b><span className="ml-2 text-xs text-[#8A94A6]">{vehicle.model}</span></button>)}</div>}
+    </div>
+  </label>;
 }
 type UploadedFile = { fileName: string; dataUrl: string };
 async function uploadFilesToServer(files: File[], type: string): Promise<UploadedFile[]> {
@@ -1495,7 +1517,7 @@ export default function App() {
     const record = calculateBalanceFreight({
       id: form.id || uid("bfr"), loadingDate: form.loadingDate || today, vehicleNumber: form.vehicleNumber || "",
       size: form.size || "", from: form.from || "", to: form.to || "", freight: Number(form.freight || 0),
-      advance: Number(form.partyAdvance || 0), partyAdvance: Number(form.partyAdvance || 0), driverAdvance: Number(form.driverAdvance || 0),
+      advance: 0, partyAdvance: 0,
       commissionPercent: Number(form.commissionPercent || 0),
       commission: Number(form.commission || 0), otherCharges: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "",
       hamali: Number(form.hamali || 0), payCharge: Number(form.payCharge || 0), partyName: form.partyName || "", chequeNeftNumber: form.chequeNeftNumber || "",
@@ -1512,7 +1534,7 @@ export default function App() {
       paymentChg: Number(form.paymentChg || 0), challanFineChg: Number(form.challanFineChg || 0),
       unlodingChg: Number(form.unlodingChg || 0), extraWeightChg: Number(form.extraWeightChg || 0),
       extraWidthChg: Number(form.extraWidthChg || 0), balancePaymentDate: form.balancePaymentDate || "",
-      advanceBalance: form.advanceBalance !== undefined && form.advanceBalance !== "" ? Number(form.advanceBalance) : undefined,
+      advanceBalance: Number(form.advanceBalance || 0),
     });
     const isNew = !form.id;
     setBalanceFreights((prev) => form.id ? prev.map((item) => item.id === form.id ? record : item) : [record, ...prev]);
@@ -1543,7 +1565,7 @@ export default function App() {
     let updated: BalanceFreightRecord | undefined;
     setBalanceFreights((prev) => prev.map((item) => {
       if (item.id !== id) return item;
-      updated = calculateBalanceFreight({ ...item, status, partyAdvance: status === "Pending" ? 0 : item.partyAdvance, paymentDate: status === "Paid" && !item.paymentDate ? today : item.paymentDate });
+      updated = calculateBalanceFreight({ ...item, status, paymentDate: status === "Paid" && !item.paymentDate ? today : item.paymentDate });
       return updated;
     }));
     notify("Vehicle register status updated", `Record marked ${status}.`, "freight");
@@ -1711,7 +1733,7 @@ export default function App() {
 
   const page = (() => {
     if (view === "dashboard") return <Dashboard vehicles={vehicles} drivers={drivers} trips={trips} expenses={expenses} invoices={invoices} notes={notes} documents={documents} maintenancePlan={maintenancePlan} balanceFreights={balanceFreights} attendance={attendance} payroll={payroll} lastRefresh={lastRefresh} setView={setView} />;
-    if (view === "vehicles") return <Vehicles vehicles={vehicles} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} openModal={openModal} edit={(item) => openModal("vehicle", Object.fromEntries(Object.entries(item).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : String(v)])))} select={(id) => { setSelected(id); openModal("vehicleDetails"); }} remove={deleteVehicle} />;
+    if (view === "vehicles") return <Vehicles vehicles={vehicles} drivers={drivers} search={search} setSearch={setSearch} filter={filter} setFilter={setFilter} openModal={openModal} edit={(item) => openModal("vehicle", Object.fromEntries(Object.entries(item).map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : String(v)])))} select={(id) => { setSelected(id); openModal("vehicleDetails"); }} remove={deleteVehicle} />;
     if (view === "liveTracking") return <LiveTracking vehicles={vehicles} drivers={drivers} trips={trips} telemetryLog={telemetryLog} />;
     if (view === "drivers") return <DriversWithDelete drivers={drivers} search={search} setSearch={setSearch} openModal={openModal} edit={(item) => openModal("driver", Object.fromEntries(Object.entries(item).filter(([k]) => k !== "documents").map(([k, v]) => [k, String(v)])))} select={(id) => { setSelected(id); openModal("driverDetails"); }} remove={deleteDriver} />;
     if (view === "customers") return <CustomersWithDelete customers={customers} trips={trips} search={search} setSearch={setSearch} openModal={openModal} remove={deleteCustomer} />;
@@ -2244,7 +2266,7 @@ function Billing({ invoices, payments, trips, customers, balanceFreights, setInv
   </div>;
 }
 
-function Vehicles({ vehicles, search, setSearch, filter, setFilter, openModal, edit, select, remove }: { vehicles: Vehicle[]; search: string; setSearch: (v: string) => void; filter: string; setFilter: (v: string) => void; openModal: (m: string) => void; edit: (vehicle: Vehicle) => void; select: (id: string) => void; remove: (id: string) => void }) {
+function Vehicles({ vehicles, drivers, search, setSearch, filter, setFilter, openModal, edit, select, remove }: { vehicles: Vehicle[]; drivers: Driver[]; search: string; setSearch: (v: string) => void; filter: string; setFilter: (v: string) => void; openModal: (m: string) => void; edit: (vehicle: Vehicle) => void; select: (id: string) => void; remove: (id: string) => void }) {
   const filtered = vehicles.filter((v) => (filter === "All" || v.status === filter) && `${v.number} ${v.model}`.toLowerCase().includes(search.toLowerCase()));
   return <div><Toolbar title="Fleet Vehicles" subtitle={`${vehicles.length} total - ${vehicles.filter((v) => v.status === "On Trip").length} running - SBR Portal telemetry ready`} search={search} setSearch={setSearch} filters={<><select value={filter} onChange={(e) => setFilter(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle}><option>All</option><option>Available</option><option>On Trip</option><option>Under Maintenance</option></select><button className="px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Filter size={14} className="inline mr-1" />Columns</button></>} action={<button onClick={() => openModal("vehicle")} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add Vehicle</button>} />
     <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-4"><Metric title="Total Fleet" value={String(vehicles.length)} /><Metric title="Running" value={String(vehicles.filter((v) => v.status === "On Trip").length)} /><Metric title="Idle" value={String(vehicles.filter((v) => v.status === "Available").length)} /><Metric title="Offline" value={String(vehicles.filter((v) => telemetryOf(v).apiSync === "Offline").length)} /><Metric title="Maintenance" value={String(vehicles.filter((v) => v.status === "Under Maintenance").length)} /><Metric title="Avg Speed" value={`${Math.round(vehicles.reduce((s, v) => s + telemetryOf(v).speed, 0) / Math.max(vehicles.length, 1))} km/h`} /></div>
@@ -2255,6 +2277,7 @@ function Vehicles({ vehicles, search, setSearch, filter, setFilter, openModal, e
             <tr className="text-[10px] font-bold uppercase text-[#6B7280] border-b border-white/50">
               <th className="w-[56px] px-3 py-3"></th>
               <th className="text-left px-3 py-3">Vehicle No.</th>
+              <th className="text-left px-3 py-3">Driver Assigned</th>
               <th className="text-left px-3 py-3">Status</th>
               <th className="text-left px-3 py-3 w-[110px]">Ignition</th>
               <th className="text-left px-3 py-3 w-[100px]">Speed</th>
@@ -2272,6 +2295,7 @@ function Vehicles({ vehicles, search, setSearch, filter, setFilter, openModal, e
                 <tr key={v.id} className="border-b border-[#EEF3F8] last:border-b-0 hover:bg-[#F8FBFF] transition-all align-middle">
                   <td className="px-3 py-4"><div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: v.status === "On Trip" ? "#10B98118" : v.status === "Available" ? "#F59E0B18" : "#EF444418" }}><Truck size={18} color={v.status === "On Trip" ? "#10B981" : v.status === "Available" ? "#F59E0B" : "#EF4444"} /></div></td>
                   <td className="px-3 py-4"><p className="text-sm font-extrabold">{v.number}</p><p className="text-xs text-[#9CA3AF]">{v.model}</p></td>
+                  <td className="px-3 py-4"><p className="text-xs font-semibold">{drivers.find((d) => d.id === v.currentDriverId)?.name || "Not assigned"}</p></td>
                   <td className="px-3 py-4"><Badge label={v.status} /><p className="mt-1 text-[10px] text-[#9CA3AF]">API {t.apiSync}</p></td>
                   <td className="px-3 py-4"><p className="text-xs font-semibold whitespace-nowrap"><span className={`inline-block w-2 h-2 rounded-full mr-1 ${t.ignition === "ON" ? "bg-emerald-500" : "bg-slate-400"}`} />{t.ignition}</p></td>
                   <td className="px-3 py-4"><p className="text-sm font-bold whitespace-nowrap">{t.speed || "-"} <span className="text-[10px] text-[#9CA3AF]">km/h</span></p></td>
@@ -2290,7 +2314,7 @@ function Vehicles({ vehicles, search, setSearch, filter, setFilter, openModal, e
         const t = telemetryOf(v);
         return <Row key={`${v.id}-mobile`} className="xl:hidden">
           <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: v.status === "On Trip" ? "#10B98118" : v.status === "Available" ? "#F59E0B18" : "#EF444418" }}><Truck size={18} color={v.status === "On Trip" ? "#10B981" : v.status === "Available" ? "#F59E0B" : "#EF4444"} /></div>
-          <div className="flex-1 min-w-[150px]"><p className="text-sm font-extrabold">{v.number}</p><p className="text-xs text-[#9CA3AF]">{v.model}</p><div className="mt-1"><Badge label={v.status} /></div></div>
+          <div className="flex-1 min-w-[150px]"><p className="text-sm font-extrabold">{v.number}</p><p className="text-xs text-[#9CA3AF]">{v.model} · Driver: {drivers.find((d) => d.id === v.currentDriverId)?.name || "Not assigned"}</p><div className="mt-1"><Badge label={v.status} /></div></div>
           <div className="text-xs text-[#6B7280] space-y-0.5"><p>{t.ignition} - {t.speed || 0} km/h</p><p>Fuel {t.fuelLevel}% - {t.location}</p></div>
           <div className="flex gap-2"><button onClick={() => select(v.id)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="View Details" style={glassSubtle}><Eye size={15} /></button><button onClick={() => edit(v)} className="w-9 h-9 rounded-xl flex items-center justify-center" title="Edit" style={glassSubtle}><SettingsIcon size={15} /></button><button onClick={() => remove(v.id)} className="w-9 h-9 rounded-xl flex items-center justify-center text-red-600" title="Delete vehicle" style={glassSubtle}><Trash2 size={15} /></button></div>
         </Row>;
@@ -2483,7 +2507,7 @@ function BalanceFreightModule({ records, vehicles, search, setSearch, openModal,
   const parties = Array.from(new Set(records.map((r) => r.partyName).filter(Boolean)));
   const vehicleNumbers = Array.from(new Set([...vehicles.map((v) => v.number), ...records.map((r) => r.vehicleNumber)].filter(Boolean)));
   const chooseStatus = (id: string, status: BalanceFreightRecord["status"]) => { updateStatus(id, status); setOpenStatus(null); };
-  return <div><Toolbar title="Vehicle Register" subtitle={`${filtered.length} records for ${month}`} search={search} setSearch={setSearch} filters={<><input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle} /><select value={party} onChange={(e) => setParty(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle}><option>All</option>{parties.map((p) => <option key={p}>{p}</option>)}</select><select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle}><option>All</option>{vehicleNumbers.map((v) => <option key={v}>{v}</option>)}</select><input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="Route" className="rounded-2xl px-4 py-2.5 text-sm outline-none w-36" style={glassSubtle} /></>} action={<><button onClick={() => exportCsv("vehicle-register", filtered.map((r) => ({ challanNo: r.challanNo || r.freightId || r.id, date: r.loadingDate, vehicleNo: r.vehicleNumber, ownerName: r.ownerName ?? "", partyName: r.partyName, cnNo: r.cnNo ?? "", size: r.size ?? "", weight: r.weight ?? "", rate: r.rate ?? 0, from: r.from, to: r.to, freight: r.freight, partyAdvance: r.partyAdvance ?? r.advance, driverAdvance: r.driverAdvance ?? 0, advanceBalance: r.advanceBalance ?? r.advance, commissionPercent: r.commissionPercent ?? 0, commission: r.commission, hamali: r.hamali, detention: r.payCharge, otherCharges: r.otherCharges, otherChargesReason: r.otherChargesReason ?? "", netBalance: r.balance, billNo: r.billNo ?? "", remarks: r.remarks })))} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Download size={15} />Export Excel</button><button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Printer size={15} />PDF / Print</button><button onClick={() => setView("freightReport")} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><FileText size={15} />Report</button><button onClick={() => openModal("balanceFreight")} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add Vehicle Register Entry</button></>} />
+  return <div><Toolbar title="Vehicle Register" subtitle={`${filtered.length} records for ${month}`} search={search} setSearch={setSearch} filters={<><input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle} /><select value={party} onChange={(e) => setParty(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle}><option>All</option>{parties.map((p) => <option key={p}>{p}</option>)}</select><select value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} className="rounded-2xl px-4 py-2.5 text-sm" style={glassSubtle}><option>All</option>{vehicleNumbers.map((v) => <option key={v}>{v}</option>)}</select><input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="Route" className="rounded-2xl px-4 py-2.5 text-sm outline-none w-36" style={glassSubtle} /></>} action={<><button onClick={() => exportCsv("vehicle-register", filtered.map((r) => ({ challanNo: r.challanNo || r.freightId || r.id, date: r.loadingDate, vehicleNo: r.vehicleNumber, ownerName: r.ownerName ?? "", partyName: r.partyName, cnNo: r.cnNo ?? "", size: r.size ?? "", weight: r.weight ?? "", rate: r.rate ?? 0, from: r.from, to: r.to, freight: r.freight, totalAdvance: r.partyAdvance ?? r.advance, commissionPercent: r.commissionPercent ?? 0, commission: r.commission, hamali: r.hamali, detention: r.payCharge, otherCharges: r.otherCharges, otherChargesReason: r.otherChargesReason ?? "", netBalance: r.balance, billNo: r.billNo ?? "", remarks: r.remarks })))} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Download size={15} />Export Excel</button><button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Printer size={15} />PDF / Print</button><button onClick={() => setView("freightReport")} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><FileText size={15} />Report</button><button onClick={() => openModal("balanceFreight")} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />Add Vehicle Register Entry</button></>} />
     <div className="grid md:grid-cols-4 gap-4 mb-4"><Metric title="Total Freight" value={rupees(filtered.reduce((s, r) => s + r.freight, 0))} /><Metric title="Advance Collected" value={rupees(filtered.reduce((s, r) => s + (r.paidAmount || r.advance || 0), 0))} /><Metric title="Completed" value={String(filtered.filter((r) => r.status === "Paid").length)} /><Metric title="Pending Balance" value={rupees(filtered.reduce((s, r) => s + r.balance, 0))} /></div>
     <div className="grid xl:grid-cols-[1fr_360px] gap-4"><DataCard>{filtered.map((r) => <Row key={r.id}><ClipboardList size={18} /><div className="flex-1 min-w-[240px]"><p className="text-sm font-semibold">{r.challanNo || r.invoiceNumber || r.freightId || r.id} - {r.vehicleNumber} - {r.from} to {r.to}</p><p className="text-xs text-[#9CA3AF]">{r.loadingDate} - {r.partyName}{r.size ? ` - ${r.size}` : ""} - Commission {r.commissionPercent ?? 0}% - {r.paymentMode || r.bank || "No bank"}</p></div><p className="hidden md:block text-xs">Final {rupees(r.finalAmount ?? r.freight)}</p><p className="text-xs">Freight {rupees(r.freight)}</p><p className="text-xs">Advance {rupees(r.paidAmount || r.advance || 0)}</p><p className="text-sm font-bold">{rupees(r.balance)}</p><div className="relative"><button onClick={() => setOpenStatus(openStatus === r.id ? null : r.id)} className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-white/60 ring-1 ring-white/70"><span className="w-1.5 h-1.5 rounded-full bg-blue-500" />{r.status}</button>{openStatus === r.id && <div className="absolute right-0 top-8 z-20 w-40 rounded-2xl p-2 shadow-xl" style={{ ...glass, background: "rgba(255,255,255,0.94)" }}><button onClick={() => chooseStatus(r.id, "Paid")} className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold hover:bg-emerald-50">Paid / Completed</button><button onClick={() => chooseStatus(r.id, "Cancelled")} className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50">Cancel</button></div>}</div><button onClick={() => onChallan(r.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}><Printer size={13} />Challan</button><button onClick={() => edit(r)} className="px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}>Edit</button><button onClick={() => remove(r.id)} className="px-3 py-2 rounded-xl text-xs font-semibold text-white bg-red-600">Delete</button></Row>)}</DataCard><div className="space-y-4"><LedgerSummary title="Party Page" rows={parties.map((p) => { const items = records.filter((r) => r.partyName === p); return { name: p, meta: `${items.length} transactions`, amount: items.reduce((s, r) => s + r.balance, 0) }; })} /><LedgerSummary title="Vehicle Page" rows={vehicleNumbers.map((v) => { const items = records.filter((r) => r.vehicleNumber === v); return { name: v, meta: `${rupees(items.reduce((s, r) => s + r.freight, 0))} earnings`, amount: items.reduce((s, r) => s + r.balance, 0) }; })} /></div></div></div>;
 }
@@ -2630,7 +2654,7 @@ function FreightRegisterReport({ balanceFreights, exportCsv }: { balanceFreights
     freightId: f.freightId || f.id, challanNo: f.challanNo || "", ownerName: f.ownerName || "", cnNo: f.cnNo || "",
     loadingDate: f.loadingDate, vehicle: f.vehicleNumber, party: f.partyName, size: f.size ?? "", weight: f.weight ?? "", rate: f.rate ?? 0, from: f.from, to: f.to,
     freight: f.freight, advanceEntries: (f.advances ?? []).map((a) => `${a.date}:${a.mode}:${a.amount}`).join(" | "),
-    partyAdvance: f.partyAdvance ?? f.advance, driverAdvance: f.driverAdvance ?? 0, advanceBalance: f.advanceBalance ?? f.advance,
+    partyAdvance: f.partyAdvance ?? f.advance, advanceBalance: f.advanceBalance ?? 0,
     commissionPercent: f.commissionPercent ?? 0, commission: f.commission, hamali: f.hamali, detention: f.payCharge,
     extraHeight: f.extraHeight ?? 0, weightRecipt: f.weightRecipt ?? 0, paymentChg: f.paymentChg ?? 0, challanFineChg: f.challanFineChg ?? 0,
     unlodingChg: f.unlodingChg ?? 0, extraWeightChg: f.extraWeightChg ?? 0, extraWidthChg: f.extraWidthChg ?? 0,
@@ -2658,9 +2682,7 @@ function FreightRegisterReport({ balanceFreights, exportCsv }: { balanceFreights
           <DetailField label="Size" value={f.size || "-"} />
           <DetailField label="Freight Amount" value={rupees(f.freight)} />
           <DetailField label="Advance Entries" value={(f.advances ?? []).length ? (f.advances ?? []).map((a) => `${a.date} - ${a.mode} - ${rupees(a.amount)}`).join(", ") : "-"} />
-          <DetailField label="Party Advance" value={rupees(f.partyAdvance ?? f.advance)} />
-          <DetailField label="Driver Advance" value={rupees(f.driverAdvance ?? 0)} />
-          <DetailField label="Balance Advance" value={rupees(f.advanceBalance ?? f.advance)} />
+          <DetailField label="Total Advance" value={rupees(f.partyAdvance ?? f.advance)} />
           <DetailField label="Commission" value={`${rupees(f.commission)} (${f.commissionPercent ?? 0}%)`} />
           <DetailField label="Extra Width" value={rupees(f.extraWidthChg ?? 0)} />
           <DetailField label="Hamali" value={rupees(f.hamali)} />
@@ -3031,7 +3053,7 @@ function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record
   return <>
     <FormSection title="Booking Register" />
     <Field label="Date" type="date" value={form.date || today} onChange={(v) => set("date", v)} />
-    <SelectField label="Vehicle No." value={form.vehicleId || ""} onChange={(v) => set("vehicleId", v)} options={[{ value: "", label: "Select available vehicle" }, ...availableVehicles.map((v) => ({ value: v.id, label: `${v.number} - ${v.model}` }))]} allowManual manualPlaceholder="Type vehicle number" />
+    <VehicleSearchField value={form.vehicleId || ""} onChange={(v) => set("vehicleId", v)} vehicles={availableVehicles} valueKind="id" />
     <SelectField label="Party Name" value={form.customerId || ""} onChange={(v) => set("customerId", v)} options={[{ value: "", label: "Select party" }, ...customers.map((c) => ({ value: c.id, label: c.company }))]} />
     <Field label="Size" value={form.size || ""} onChange={(v) => set("size", v)} />
     <Field label="From" value={form.pickup || ""} onChange={(v) => set("pickup", v)} />
@@ -3123,15 +3145,16 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
   const updateAdvance = (index: number, patch: Partial<AdvanceEntry>) => setAdvances(advances.map((a, i) => i === index ? { ...a, ...patch } : a));
   const removeAdvance = (index: number) => setAdvances(advances.filter((_, i) => i !== index));
   const totalAdvance = advances.reduce((s, a) => s + (Number(a.amount) || 0), 0);
-  const driverAdvance = Number(form.driverAdvance || 0);
-  const chargesTotal = commission + Number(form.extraHeight || 0) + Number(form.paymentChg || 0) + Number(form.challanFineChg || 0) + Number(form.otherCharges || 0) + Number(form.extraWidthChg || 0)
-    + Number(form.payCharge || 0) + Number(form.weightRecipt || 0) + Number(form.hamali || 0) + Number(form.unlodingChg || 0) + Number(form.extraWeightChg || 0);
-  const netBalance = Math.max(freight - totalAdvance - chargesTotal - Number(form.discount || 0), 0);
+  const deductions = commission + Number(form.hamali || 0) + Number(form.paymentChg || 0);
+  const additions = Number(form.payCharge || 0) + Number(form.extraHeight || 0) + Number(form.extraWidthChg || 0) + Number(form.extraWeightChg || 0)
+    + Number(form.weightRecipt || 0) + Number(form.unlodingChg || 0) + Number(form.challanFineChg || 0) + Number(form.otherCharges || 0);
+  const totalAdjustment = additions - deductions;
+  const netBalance = freight - totalAdvance + totalAdjustment;
   return <>
     <FormSection title="Lorry Hire Challan" />
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Challan number is assigned automatically in sequence when you save this record.</div>
     <Field label="Date" type="date" value={form.loadingDate || today} onChange={(v) => set("loadingDate", v)} />
-    <SelectField label="Vehicle No." value={form.vehicleNumber || ""} onChange={(v) => set("vehicleNumber", v)} options={[{ value: "", label: "Select vehicle" }, ...vehicles.map((v) => ({ value: v.number, label: v.number }))]} allowManual manualPlaceholder="Type vehicle number" />
+    <VehicleSearchField value={form.vehicleNumber || ""} onChange={(v) => set("vehicleNumber", v)} vehicles={vehicles} valueKind="number" />
     <Field label="Owner Name" value={form.ownerName || ""} onChange={(v) => set("ownerName", v)} />
     <Field label="Party Name" value={form.partyName || ""} onChange={(v) => set("partyName", v)} />
     <Field label="From" value={form.from || ""} onChange={(v) => set("from", v)} />
@@ -3153,8 +3176,8 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
     </div>
     <button type="button" onClick={addAdvance} className="w-full mb-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-semibold" style={glassSubtle}><Plus size={13} />Add Advance Entry</button>
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Total Advance: {rupees(totalAdvance)}</div>
-    <Field label="Driver Advance" type="number" value={form.driverAdvance || ""} onChange={(v) => set("driverAdvance", v)} />
-    <Field label="Balance Advance" type="number" value={form.advanceBalance ?? String(totalAdvance - driverAdvance)} onChange={(v) => set("advanceBalance", v)} />
+    <Field label="Balance Advance" type="number" value={form.advanceBalance || ""} onChange={(v) => set("advanceBalance", v)} />
+    <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Balance Advance is shown separately on the challan and is not added to or deducted from Final Balance.</div>
 
     <FormSection title="Commission & Charges" />
     <Field label="Commission %" type="number" value={form.commissionPercent ?? ""} onChange={(v) => set("commissionPercent", v)} />
@@ -3166,7 +3189,7 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
       </div>
     </label>
     {showCharges && <OtherChargesModal initialAmount={form.otherCharges || ""} initialReason={form.otherChargesReason || ""} onApply={(amount, reason) => { set("otherCharges", amount); set("otherChargesReason", reason); }} onClose={() => setShowCharges(false)} />}
-    <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Total charges (-): {rupees(chargesTotal)}</div>
+    <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Total Adjustment: {rupees(totalAdjustment)} (deductions {rupees(deductions)}, additions {rupees(additions)})</div>
     <div className="rounded-2xl p-4 mb-4 text-sm font-bold" style={glassSubtle}>Balance: {rupees(netBalance)}</div>
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Bill number is assigned automatically in sequence when you save this record.</div>
     <Field label="Remarks" value={form.remarks || ""} onChange={(v) => set("remarks", v)} />

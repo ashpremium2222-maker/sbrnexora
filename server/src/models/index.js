@@ -224,7 +224,7 @@ const balanceFreightSchema = new mongoose.Schema({
   size: String,
   weight: String,
   rate: { type: Number, default: 0 },
-  advances: [{ date: Date, amount: Number, note: String }],
+  advances: [{ date: Date, amount: Number, mode: String, note: String }],
   linkedTrips: [String],
   invoiceNumber: String,
   billingDate: Date,
@@ -239,7 +239,6 @@ const balanceFreightSchema = new mongoose.Schema({
   finalAmount: { type: Number, default: 0 },
   advance: { type: Number, default: 0 },
   partyAdvance: { type: Number, default: 0 },
-  driverAdvance: { type: Number, default: 0 },
   advanceBalance: { type: Number, default: 0 },
   // Store the selected percentage itself.  Every calculation and print view
   // reads this persisted value; no frontend or server fallback percentage.
@@ -276,15 +275,20 @@ balanceFreightSchema.pre("validate", function calculateBalanceFreight(next) {
     this.commissionPercent = this.freight ? ((this.commission || 0) / this.freight) * 100 : 0;
   }
   this.commission = Math.round((this.freight || 0) * (this.commissionPercent || 0) / 100);
-  const deductions = (this.commission || 0) + (this.otherCharges || 0) + (this.hamali || 0) + (this.payCharge || 0)
-    + (this.extraHeight || 0) + (this.weightRecipt || 0) + (this.paymentChg || 0) + (this.challanFineChg || 0)
-    + (this.unlodingChg || 0) + (this.extraWeightChg || 0) + (this.extraWidthChg || 0) + (this.discount || 0);
-  this.balance = this.status === "Paid" || this.status === "Cancelled" ? 0 : Math.max((this.freight || 0) - (this.advance || 0) - deductions, 0);
-  // A cancellation is an explicit operator action and must not be silently
-  // converted to Paid just because the balance is zero.
-  if (this.status !== "Cancelled") {
-    this.status = this.balance === 0 ? "Paid" : (this.advance || this.payCharge || this.paymentDate) ? "Partially Paid" : "Pending";
-  }
+  const advances = Array.isArray(this.advances) ? this.advances : [];
+  const totalAdvance = advances.length
+    ? advances.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0)
+    : (Number(this.partyAdvance ?? this.advance) || 0);
+  this.advance = totalAdvance;
+  this.partyAdvance = totalAdvance;
+  // Balance Advance remains an independently stored challan field and does
+  // not alter the final balance.
+  this.advanceBalance = Number(this.advanceBalance || 0);
+  const deductions = (this.commission || 0) + (this.hamali || 0) + (this.paymentChg || 0);
+  const additions = (this.payCharge || 0) + (this.extraHeight || 0) + (this.extraWidthChg || 0)
+    + (this.extraWeightChg || 0) + (this.weightRecipt || 0) + (this.unlodingChg || 0)
+    + (this.challanFineChg || 0) + (this.otherCharges || 0);
+  this.balance = (this.freight || 0) - totalAdvance - deductions + additions;
   next();
 });
 
