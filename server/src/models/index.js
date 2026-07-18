@@ -290,7 +290,10 @@ balanceFreightSchema.pre("validate", function calculateBalanceFreight(next) {
   const additions = (this.payCharge || 0) + (this.extraHeight || 0) + (this.extraWidthChg || 0)
     + (this.extraWeightChg || 0) + (this.weightRecipt || 0) + (this.unlodingChg || 0)
     + (this.challanFineChg || 0) + (this.otherCharges || 0);
-  this.balance = (this.freight || 0) - totalAdvance - deductions + additions;
+  // The printed challan calls this signed net value "Extra". Keep a
+  // negative Extra negative so the database balance matches the challan.
+  const extra = additions - deductions;
+  this.balance = (this.freight || 0) - totalAdvance + extra;
   next();
 });
 

@@ -552,9 +552,10 @@ const calculateBalanceFreight = (record: Omit<BalanceFreightRecord, "balance" | 
   const additions = (record.payCharge || 0) + (record.extraHeight || 0) + (record.extraWidthChg || 0)
     + (record.extraWeightChg || 0) + (record.weightRecipt || 0) + (record.unlodingChg || 0)
     + (record.challanFineChg || 0) + (record.otherCharges || 0);
-  // This exactly mirrors the original challan: only the three deduction
-  // fields reduce balance; all other listed adjustments are additions.
-  const payable = record.freight - partyAdvance - deductions + additions;
+  // The original challan calls the net of additions and deductions "Extra".
+  // It is intentionally signed: a net deduction is a negative Extra value.
+  const extra = additions - deductions;
+  const payable = record.freight - partyAdvance + extra;
   const status = record.status || (partyAdvance > 0 ? "Partially Paid" : "Pending");
   const paidAmount = partyAdvance;
   return { ...record, advances, advance: partyAdvance, partyAdvance, advanceBalance, commission, commissionPercent, paidAmount, balance: payable, status };
@@ -980,8 +981,9 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
   const additions = (record.payCharge || 0) + (record.extraHeight || 0) + (record.extraWidthChg || 0)
     + (record.extraWeightChg || 0) + (record.weightRecipt || 0) + (record.unlodingChg || 0)
     + (record.challanFineChg || 0) + (record.otherCharges || 0);
-  const totalAdjustment = additions - deductions;
-  const balance = record.freight - totalAdvance + totalAdjustment;
+  // "Extra" is the signed net of all charge additions and deductions.
+  const extra = additions - deductions;
+  const balance = record.freight - totalAdvance + extra;
   return (
     <div className="fixed inset-0 bg-[#1a1d2e]/45 backdrop-blur-sm z-[80] flex items-center justify-center p-4" onMouseDown={onClose}>
       <div className="w-full max-w-3xl max-h-[92vh] rounded-[20px] overflow-hidden flex flex-col bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -1030,7 +1032,7 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
                       </tbody>
                     </table>
                     <div className="border-t border-[#111827] mt-2 pt-1 flex justify-between"><span className="font-semibold">Total Advance</span><span>{totalAdvance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>
-                    <div className="flex justify-between"><span className="font-semibold">Extra</span><span>{totalAdjustment.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>
+                    <div className="flex justify-between"><span className="font-semibold">Extra</span><span>{extra.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>
                     <div className="flex justify-between"><span className="font-semibold">Balance</span><span>{balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>
                   </td>
                 </tr>
@@ -1040,7 +1042,7 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
             <table className="w-full text-[11px] border-collapse border-t border-[#111827] mt-2">
               <tbody>
                 {chargesLeft.map(([label, value], i) => <tr key={label}><td className="border-r border-[#111827] px-2 py-1 w-1/4">{label}</td><td className="border-r border-[#111827] px-2 py-1 text-right w-1/4">{value.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="border-r border-[#111827] px-2 py-1 w-1/4">{chargesRight[i]?.[0] ?? ""}</td><td className="px-2 py-1 text-right w-1/4">{chargesRight[i] ? chargesRight[i][1].toLocaleString("en-IN", { minimumFractionDigits: 2 }) : ""}</td></tr>)}
-                <tr className="border-t border-[#111827] font-semibold"><td colSpan={3} className="px-2 py-1 text-right">Total Adjustment:</td><td className="px-2 py-1 text-right">{totalAdjustment.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
+                <tr className="border-t border-[#111827] font-semibold"><td colSpan={3} className="px-2 py-1 text-right">Extra:</td><td className="px-2 py-1 text-right">{extra.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>
               </tbody>
             </table>
 
@@ -3165,8 +3167,8 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
   const deductions = commission + Number(form.hamali || 0) + Number(form.paymentChg || 0);
   const additions = Number(form.payCharge || 0) + Number(form.extraHeight || 0) + Number(form.extraWidthChg || 0) + Number(form.extraWeightChg || 0)
     + Number(form.weightRecipt || 0) + Number(form.unlodingChg || 0) + Number(form.challanFineChg || 0) + Number(form.otherCharges || 0);
-  const totalAdjustment = additions - deductions;
-  const netBalance = freight - totalAdvance + totalAdjustment;
+  const extra = additions - deductions;
+  const netBalance = freight - totalAdvance + extra;
   return <>
     <FormSection title="Lorry Hire Challan" />
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Challan number is assigned automatically in sequence when you save this record.</div>
@@ -3212,7 +3214,7 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
       set("payCharge", values.payCharge); set("weightRecipt", values.weightRecipt); set("hamali", values.hamali); set("unlodingChg", values.unlodingChg); set("extraWeightChg", values.extraWeightChg);
       set("extraHeight", values.extraHeight); set("extraWidthChg", values.extraWidthChg); set("paymentChg", values.paymentChg); set("challanFineChg", values.challanFineChg); set("otherCharges", values.otherCharges);
     }} onClose={() => setShowCharges(false)} />}
-    <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Total Adjustment: {rupees(totalAdjustment)} (deductions {rupees(deductions)}, additions {rupees(additions)})</div>
+    <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Extra: {rupees(extra)} (deductions {rupees(deductions)}, additions {rupees(additions)})</div>
     <div className="rounded-2xl p-4 mb-4 text-sm font-bold" style={glassSubtle}>Balance: {rupees(netBalance)}</div>
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Bill number is assigned automatically in sequence when you save this record.</div>
     <Field label="Remarks" value={form.remarks || ""} onChange={(v) => set("remarks", v)} />
@@ -3377,7 +3379,7 @@ function VehicleChargeBreakdownModal({ values, onApply, onClose }: { values: Veh
         <input type="number" min="0" value={draft[row.key]} onWheel={(event) => event.currentTarget.blur()} onChange={(event) => update(row.key, event.target.value)} placeholder="0" className="rounded-xl border border-white/60 bg-white/70 px-2 py-2 text-xs outline-none" />
       </label>)}
     </div>
-    <div className="flex items-center justify-between rounded-2xl px-4 py-3 mt-4 text-sm font-bold" style={glassSubtle}><span>Total Adjustment</span><span>{rupees(additions - deductions)}</span></div>
+    <div className="flex items-center justify-between rounded-2xl px-4 py-3 mt-4 text-sm font-bold" style={glassSubtle}><span>Extra</span><span>{rupees(additions - deductions)}</span></div>
     <div className="flex justify-end gap-3 mt-4"><button type="button" onClick={onClose} className="px-5 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}>Close</button><button type="button" onClick={() => { onApply(draft); onClose(); }} className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]">Save breakdown</button></div>
   </div>;
 }
