@@ -993,7 +993,7 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
           </div>
         </div>
         <div className="flex-1 overflow-auto bg-[#0B111C]/5 p-4 flex justify-center">
-          <div id="challan-printable" className="bg-white w-full max-w-[720px] p-6 text-[#111827] border-2 border-[#111827] rounded-md" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+          <div id="challan-printable" className="bg-white w-full max-w-[720px] p-6 text-[#111827] border-2 border-[#111827] rounded-md" style={{ fontFamily: "Roboto, Arial, sans-serif", fontWeight: 400 }}>
             <p className="text-center text-[10px] font-bold tracking-wide">LORRY HIRE CHALLAN</p>
             <h1 className="text-center text-2xl font-bold tracking-wide mt-1 text-[#F97316]">SHREE BIROBA ROADLINES</h1>
             <p className="text-center text-[10px] mt-1" style={{ fontFamily: "Roboto, Arial, sans-serif", fontWeight: 700 }}>Transport Contractor & Carrying Heavy & ODC Size Consignment Services</p>
@@ -3188,7 +3188,13 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
         <button type="button" onClick={() => setShowCharges(true)} className="px-4 py-3 rounded-2xl text-xs font-semibold whitespace-nowrap" style={glassSubtle}>Breakdown</button>
       </div>
     </label>
-    {showCharges && <OtherChargesModal initialAmount={form.otherCharges || ""} initialReason={form.otherChargesReason || ""} onApply={(amount, reason) => { set("otherCharges", amount); set("otherChargesReason", reason); }} onClose={() => setShowCharges(false)} />}
+    {showCharges && <VehicleChargeBreakdownModal values={{
+      payCharge: form.payCharge || "", weightRecipt: form.weightRecipt || "", hamali: form.hamali || "", unlodingChg: form.unlodingChg || "", extraWeightChg: form.extraWeightChg || "",
+      extraHeight: form.extraHeight || "", extraWidthChg: form.extraWidthChg || "", paymentChg: form.paymentChg || "", challanFineChg: form.challanFineChg || "", otherCharges: form.otherCharges || "",
+    }} onApply={(values) => {
+      set("payCharge", values.payCharge); set("weightRecipt", values.weightRecipt); set("hamali", values.hamali); set("unlodingChg", values.unlodingChg); set("extraWeightChg", values.extraWeightChg);
+      set("extraHeight", values.extraHeight); set("extraWidthChg", values.extraWidthChg); set("paymentChg", values.paymentChg); set("challanFineChg", values.challanFineChg); set("otherCharges", values.otherCharges);
+    }} onClose={() => setShowCharges(false)} />}
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Total Adjustment: {rupees(totalAdjustment)} (deductions {rupees(deductions)}, additions {rupees(additions)})</div>
     <div className="rounded-2xl p-4 mb-4 text-sm font-bold" style={glassSubtle}>Balance: {rupees(netBalance)}</div>
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Bill number is assigned automatically in sequence when you save this record.</div>
@@ -3324,6 +3330,39 @@ function OtherChargesModal({ initialAmount, initialReason, onApply, onClose }: {
       </div>
     </div>
   );
+}
+type VehicleChargeKey = "extraHeight" | "paymentChg" | "challanFineChg" | "otherCharges" | "extraWidthChg" | "payCharge" | "weightRecipt" | "hamali" | "unlodingChg" | "extraWeightChg";
+type VehicleChargeValues = Record<VehicleChargeKey, string>;
+const VEHICLE_CHARGE_ROWS: { key: VehicleChargeKey; label: string; deduction?: boolean }[] = [
+  { key: "extraHeight", label: "Extra Height" },
+  { key: "paymentChg", label: "Payment Charges", deduction: true },
+  { key: "challanFineChg", label: "Challan Fine Charges" },
+  { key: "otherCharges", label: "Other Charges" },
+  { key: "extraWidthChg", label: "Extra Width" },
+  { key: "payCharge", label: "Detention" },
+  { key: "weightRecipt", label: "Weight Receipt" },
+  { key: "hamali", label: "Hamali", deduction: true },
+  { key: "unlodingChg", label: "Unloading Charges" },
+  { key: "extraWeightChg", label: "Extra Weight" },
+];
+function VehicleChargeBreakdownModal({ values, onApply, onClose }: { values: VehicleChargeValues; onApply: (values: VehicleChargeValues) => void; onClose: () => void }) {
+  const [draft, setDraft] = useState<VehicleChargeValues>(values);
+  const update = (key: VehicleChargeKey, value: string) => setDraft((current) => ({ ...current, [key]: value }));
+  const deductions = VEHICLE_CHARGE_ROWS.filter((row) => row.deduction).reduce((total, row) => total + Number(draft[row.key] || 0), 0);
+  const additions = VEHICLE_CHARGE_ROWS.filter((row) => !row.deduction).reduce((total, row) => total + Number(draft[row.key] || 0), 0);
+  return <div className="relative z-20 w-full rounded-3xl p-4 mb-4 border border-white/60 shadow-xl" style={{ ...glass, background: "var(--card)" }}>
+    <p className="text-lg font-bold mb-1">Challan Charge Breakdown</p>
+    <p className="text-xs text-[#9CA3AF] mb-4">Every amount is saved in its own challan field and will reappear in Edit and on the matching printed challan line.</p>
+    <div className="max-h-[55vh] overflow-y-auto pr-1 rounded-2xl" style={glassSubtle}>
+      <div className="grid grid-cols-[1fr_120px] gap-2 px-3 py-2 text-xs font-bold text-[#9CA3AF] border-b border-white/60"><span>Charge</span><span>Amount</span></div>
+      {VEHICLE_CHARGE_ROWS.map((row) => <label key={row.key} className="grid grid-cols-[1fr_120px] gap-2 px-3 py-2 items-center border-b border-white/40 last:border-0">
+        <span className="text-xs font-semibold">{row.label}{row.deduction ? " (-)" : ""}</span>
+        <input type="number" min="0" value={draft[row.key]} onWheel={(event) => event.currentTarget.blur()} onChange={(event) => update(row.key, event.target.value)} placeholder="0" className="rounded-xl border border-white/60 bg-white/70 px-2 py-2 text-xs outline-none" />
+      </label>)}
+    </div>
+    <div className="flex items-center justify-between rounded-2xl px-4 py-3 mt-4 text-sm font-bold" style={glassSubtle}><span>Total Adjustment</span><span>{rupees(additions - deductions)}</span></div>
+    <div className="flex justify-end gap-3 mt-4"><button type="button" onClick={onClose} className="px-5 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}>Close</button><button type="button" onClick={() => { onApply(draft); onClose(); }} className="px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]">Save breakdown</button></div>
+  </div>;
 }
 type TripExpenseRow = { id: string; category: string; amount: string; remark: string; custom?: boolean };
 const DEFAULT_TRIP_EXPENSES = ["Toll / FASTag", "Fuel", "Fooding", "AdBlue"];
