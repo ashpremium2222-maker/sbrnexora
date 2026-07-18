@@ -849,10 +849,17 @@ function DocumentViewerModal({ doc, onClose }: { doc: ViewableDoc; onClose: () =
   );
 }
 function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip: Trip; customer?: Customer; vehicle?: Vehicle; company: CompanyProfile; onClose: () => void }) {
-  const advance = trip.advanceAmount ?? 0;
+  const advance = trip.advances?.length ? trip.advances.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0) : (trip.advanceAmount ?? 0);
   const detention = trip.otherExpenses ?? 0;
   const amount = trip.freight + detention;
   const balance = Math.max(amount - advance, 0);
+  const allCharges = [
+    ...(advance > 0 ? [["Advance", advance] as const] : []),
+    ...(detention > 0 ? [[trip.otherChargesReason || "Detention", detention] as const] : []),
+    ...((trip.expenseRemarks ?? []).filter((item) => item.amount > 0).map((item) => [item.category, item.amount] as const)),
+    ...(trip.tollCharges ? [["Toll / FASTag", trip.tollCharges] as const] : []),
+    ...(trip.driverAllowance ? [["Driver Allowance", trip.driverAllowance] as const] : []),
+  ];
   const printDate = (value?: string) => {
     if (!value) return "-";
     const [year, month, day] = value.slice(0, 10).split("-");
@@ -884,10 +891,10 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
                 <div className="text-right"><p><span className="font-semibold">Bill No. :</span> {trip.billNo || "-"}</p><p><span className="font-semibold">Date :</span> <span className="font-sans font-bold">{printDate(trip.date)}</span></p></div>
               </div>
               <p className="text-xs border-t border-[#111827] mt-2 pt-2 text-left px-2">We Hereby Submit Our Freight Bill For Transportation Of Your Goods As Under</p>
-              <table className="w-full text-[11px] border-collapse mt-1">
+              <table className="w-full table-fixed text-[10px] border-collapse mt-1">
                 <thead>
                   <tr className="border-t border-b border-[#111827]">
-                    {["Sr.", "Date", "Lr No.", "Truck No.", "From", "To", "Size", "Weight", "Rate", "Freight"].map((h) => <th key={h} className="border-r border-[#111827] last:border-r-0 px-1 py-1 font-semibold">{h}</th>)}
+                    {["Sr.", "Date", "Lr No.", "Truck No.", "From", "To", "Size", "Weight", "Rate", "Freight", "All Charges"].map((h) => <th key={h} className="border-r border-[#111827] last:border-r-0 px-1 py-1 font-semibold">{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -904,33 +911,30 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.size || "-"}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.weight || "-"}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">Fix</td>
-                    <td className="px-1 py-1 text-right">
-                      <p>{trip.freight.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
-                      {advance > 0 && <p className="text-[10px] mt-1">Advance<br />{advance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>}
-                      {detention > 0 && <p className="text-[10px] mt-1">{trip.otherChargesReason || "Detention"}<br />{detention.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>}
-                    </td>
+                    <td className="border-r border-[#111827] px-1 py-1 text-right align-top">{trip.freight.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className="px-1 py-1 text-right align-top">{allCharges.length ? allCharges.map(([label, value], index) => <p key={`${label}-${index}`} className="mb-1"><span className="block text-left">{label}</span>{value.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>) : "-"}</td>
                   </tr>
                   {Array.from({ length: 6 }).map((_, rowIndex) => (
                     <tr key={rowIndex}>
-                      {Array.from({ length: 10 }).map((__, columnIndex) => (
-                        <td key={columnIndex} className={`h-6 ${columnIndex < 9 ? "border-r border-[#111827]" : ""}`}>&nbsp;</td>
+                      {Array.from({ length: 11 }).map((__, columnIndex) => (
+                        <td key={columnIndex} className={`h-6 ${columnIndex < 10 ? "border-r border-[#111827]" : ""}`}>&nbsp;</td>
                       ))}
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-[#111827]">
-                    <td colSpan={7} className="align-bottom px-1 py-1 text-left text-[10px] italic">{trip.remarks || ""}</td>
+                    <td colSpan={8} className="align-bottom px-1 py-1 text-left text-[10px] italic">{trip.remarks || ""}</td>
                     <td colSpan={2} className="border-l border-[#111827] px-2 py-1 text-right font-semibold">Amount</td>
                     <td className="border-l border-[#111827] px-2 py-1 text-right">{amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   </tr>
                   <tr>
-                    <td colSpan={7}></td>
+                    <td colSpan={8}></td>
                     <td colSpan={2} className="border-l border-[#111827] px-2 py-1 text-right font-semibold">Advance</td>
                     <td className="border-l border-[#111827] px-2 py-1 text-right">{advance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   </tr>
                   <tr className="border-b border-[#111827]">
-                    <td colSpan={7}></td>
+                    <td colSpan={8}></td>
                     <td colSpan={2} className="border-l border-t border-[#111827] px-2 py-1 text-right font-semibold">Balance</td>
                     <td className="border-l border-t border-[#111827] px-2 py-1 text-right font-bold">{balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   </tr>
@@ -1103,15 +1107,18 @@ function SelectField({ label, value, onChange, options, allowManual = false, man
 function VehicleSearchField({ label = "Vehicle No.", value, onChange, vehicles, valueKind, onManualChange }: { label?: string; value: string; onChange: (value: string) => void; vehicles: Vehicle[]; valueKind: "id" | "number"; onManualChange?: (value: string) => void }) {
   const selected = vehicles.find((vehicle) => (valueKind === "id" ? vehicle.id : vehicle.number) === value);
   const [query, setQuery] = useState(selected?.number ?? value ?? "");
+  // A rented/unregistered vehicle is a valid final selection too. Keep the
+  // suggestion list closed once the user has chosen to enter it manually.
+  const [manualSelected, setManualSelected] = useState(Boolean(value) && !selected);
   const normalized = query.replace(/[^a-z0-9]/gi, "").toLowerCase();
   const matches = vehicles.filter((vehicle) => vehicle.number.replace(/[^a-z0-9]/gi, "").toLowerCase().includes(normalized)).slice(0, 8);
-  const choose = (vehicle: Vehicle) => { setQuery(vehicle.number); onChange(valueKind === "id" ? vehicle.id : vehicle.number); onManualChange?.(""); };
-  const chooseManual = () => { const manual = query.trim().toUpperCase(); if (!manual) return; setQuery(manual); if (valueKind === "number") onChange(manual); else onManualChange?.(manual); };
+  const choose = (vehicle: Vehicle) => { setQuery(vehicle.number); setManualSelected(false); onChange(valueKind === "id" ? vehicle.id : vehicle.number); onManualChange?.(""); };
+  const chooseManual = () => { const manual = query.trim().toUpperCase(); if (!manual) return; setQuery(manual); setManualSelected(true); if (valueKind === "number") onChange(manual); else onManualChange?.(manual); };
   return <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]">
     <span>{label}</span>
     <div className="relative mt-1.5">
-      <input value={query} onChange={(event) => { const next = event.target.value.toUpperCase(); setQuery(next); const exact = vehicles.find((vehicle) => vehicle.number.toLowerCase() === next.toLowerCase()); onChange(exact ? (valueKind === "id" ? exact.id : exact.number) : valueKind === "number" ? next : ""); if (exact) onManualChange?.(""); }} placeholder="Type vehicle number, e.g. MH12 or 12" className="w-full rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1a1d2e]/10" />
-      {query && !selected && <div className="absolute z-30 mt-1 w-full max-h-48 overflow-auto rounded-2xl border border-white/70 bg-white shadow-xl p-1">{matches.map((vehicle) => <button key={vehicle.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(vehicle)} className="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-100"><b>{vehicle.number}</b><span className="ml-2 text-xs text-[#8A94A6]">{vehicle.model}</span></button>)}<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={chooseManual} className="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold text-blue-700 hover:bg-blue-50">Enter “{query}” manually <span className="ml-1 text-xs font-normal text-[#8A94A6]">(rented / unregistered)</span></button></div>}
+      <input value={query} onChange={(event) => { const next = event.target.value.toUpperCase(); setQuery(next); const exact = vehicles.find((vehicle) => vehicle.number.toLowerCase() === next.toLowerCase()); const hasMatches = vehicles.some((vehicle) => vehicle.number.replace(/[^a-z0-9]/gi, "").toLowerCase().includes(next.replace(/[^a-z0-9]/gi, "").toLowerCase())); if (exact) { setManualSelected(false); onChange(valueKind === "id" ? exact.id : exact.number); onManualChange?.(""); } else if (next && !hasMatches) { setManualSelected(true); if (valueKind === "number") onChange(next); else onManualChange?.(next); } else { setManualSelected(false); onChange(""); onManualChange?.(""); } }} placeholder="Type vehicle number, e.g. MH12 or 12" className="w-full rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1a1d2e]/10" />
+      {query && !selected && !manualSelected && <div className="absolute z-30 mt-1 w-full max-h-48 overflow-auto rounded-2xl border border-white/70 bg-white shadow-xl p-1">{matches.map((vehicle) => <button key={vehicle.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(vehicle)} className="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-100"><b>{vehicle.number}</b><span className="ml-2 text-xs text-[#8A94A6]">{vehicle.model}</span></button>)}<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={chooseManual} className="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold text-blue-700 hover:bg-blue-50">Enter “{query}” manually <span className="ml-1 text-xs font-normal text-[#8A94A6]">(rented / unregistered)</span></button></div>}
     </div>
   </label>;
 }
