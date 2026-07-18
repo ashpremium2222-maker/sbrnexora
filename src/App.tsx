@@ -853,10 +853,21 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
   const detention = trip.otherExpenses ?? 0;
   const amount = trip.freight + detention;
   const balance = Math.max(amount - advance, 0);
+  // Older saves keep the Detention amount in `otherExpenses`; newer saves can
+  // also include it in the trip-breakdown list.  It is one charge, so only
+  // render it once on the bill when both representations describe it.
+  const normalizedChargeName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const detentionName = trip.otherChargesReason || "Detention";
+  const breakdownCharges = (trip.expenseRemarks ?? []).filter((item) => {
+    if (item.amount <= 0) return false;
+    const isDetention = normalizedChargeName(item.category).includes("detention");
+    const sameAmount = Number(item.amount) === Number(detention);
+    return !(detention > 0 && isDetention && sameAmount);
+  });
   const allCharges = [
     ...(advance > 0 ? [["Advance", advance] as const] : []),
-    ...(detention > 0 ? [[trip.otherChargesReason || "Detention", detention] as const] : []),
-    ...((trip.expenseRemarks ?? []).filter((item) => item.amount > 0).map((item) => [item.category, item.amount] as const)),
+    ...(detention > 0 ? [[detentionName, detention] as const] : []),
+    ...(breakdownCharges.map((item) => [item.category, item.amount] as const)),
     ...(trip.tollCharges ? [["Toll / FASTag", trip.tollCharges] as const] : []),
     ...(trip.driverAllowance ? [["Driver Allowance", trip.driverAllowance] as const] : []),
   ];
