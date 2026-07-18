@@ -136,7 +136,7 @@ function mapTripFromApi(doc: Record<string, unknown>): Trip {
     distanceKm: Number(doc.distanceKm || 0), durationHrs: Number(doc.durationHrs || 0), freight: Number(doc.freight || 0), status: (doc.status as TripStatus) || "Assigned",
     lrNumber: doc.lrNumber ? String(doc.lrNumber) : undefined, cargoName: doc.cargoName ? String(doc.cargoName) : undefined, materialType: doc.materialType ? String(doc.materialType) : undefined,
     weight: doc.weight ? String(doc.weight) : undefined, quantity: doc.quantity ? String(doc.quantity) : undefined, endDate: doc.endDate ? String(doc.endDate).slice(0, 10) : undefined,
-    advanceAmount: Number(doc.advanceAmount || 0), tollCharges: Number(doc.tollCharges || 0), driverAllowance: Number(doc.driverAllowance || 0), otherExpenses: Number(doc.otherExpenses || 0),
+    advanceAmount: Number(doc.advanceAmount || 0), advances: ((doc.advances as Record<string, unknown>[]) || []).map((entry) => ({ date: String(entry.date || "").slice(0, 10), mode: String(entry.mode || entry.note || "Cash"), amount: Number(entry.amount || 0) })), manualVehicleNumber: doc.manualVehicleNumber ? String(doc.manualVehicleNumber) : undefined, tollCharges: Number(doc.tollCharges || 0), driverAllowance: Number(doc.driverAllowance || 0), otherExpenses: Number(doc.otherExpenses || 0),
     invoiceNumber: doc.invoiceNumber ? String(doc.invoiceNumber) : undefined, paymentStatus: (doc.paymentStatus as PaymentStatus) || "Pending",
     ewayBill: doc.ewayBill ? String(doc.ewayBill) : undefined, deliveryReceipt: doc.deliveryReceipt ? String(doc.deliveryReceipt) : undefined,
     size: doc.size ? String(doc.size) : undefined, billNo: doc.billNo ? String(doc.billNo) : undefined, chNo: doc.chNo ? String(doc.chNo) : undefined,
@@ -150,7 +150,7 @@ function tripToApiPayload(item: Trip) {
   return {
     customer: isMongoId(item.customerId) ? item.customerId : undefined, vehicle: isMongoId(item.vehicleId) ? item.vehicleId : undefined, driver: isMongoId(item.driverId) ? item.driverId : undefined,
     pickup: item.pickup, drop: item.drop, lrNumber: item.lrNumber, cargoName: item.cargoName, materialType: item.materialType, weight: item.weight, quantity: item.quantity, cargo: item.cargo,
-    date: item.date || undefined, endDate: item.endDate || undefined, distanceKm: item.distanceKm, durationHrs: item.durationHrs, freight: item.freight, advanceAmount: item.advanceAmount,
+    date: item.date || undefined, endDate: item.endDate || undefined, distanceKm: item.distanceKm, durationHrs: item.durationHrs, freight: item.freight, advanceAmount: item.advanceAmount, advances: item.advances || [], manualVehicleNumber: item.manualVehicleNumber || undefined,
     tollCharges: item.tollCharges, driverAllowance: item.driverAllowance, otherExpenses: item.otherExpenses, invoiceNumber: item.invoiceNumber, paymentStatus: item.paymentStatus,
     ewayBill: item.ewayBill, deliveryReceipt: item.deliveryReceipt, status: item.status, remarks: item.remarks,
     size: item.size, billNo: item.billNo, chNo: item.chNo, receivedDate: item.receivedDate || undefined,
@@ -323,7 +323,7 @@ type Trip = {
   id: string; customerId: string; vehicleId: string; driverId: string; pickup: string; drop: string;
   cargo: string; date: string; distanceKm: number; durationHrs: number; freight: number; status: TripStatus;
   lrNumber?: string; cargoName?: string; materialType?: string; weight?: string; quantity?: string; endDate?: string;
-  advanceAmount?: number; tollCharges?: number; driverAllowance?: number; otherExpenses?: number; otherChargesReason?: string; expenseRemarks?: TripExpenseRemark[]; invoiceNumber?: string; paymentStatus?: PaymentStatus;
+  advanceAmount?: number; advances?: AdvanceEntry[]; manualVehicleNumber?: string; tollCharges?: number; driverAllowance?: number; otherExpenses?: number; otherChargesReason?: string; expenseRemarks?: TripExpenseRemark[]; invoiceNumber?: string; paymentStatus?: PaymentStatus;
   ewayBill?: string; deliveryReceipt?: string;
   size?: string; billNo?: string; chNo?: string; receivedDate?: string;
   podDocs: string[]; remarks?: string;
@@ -868,7 +868,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
           </div>
         </div>
         <div className="flex-1 overflow-auto bg-[#0B111C]/5 p-4 flex justify-center">
-          <div id="freight-bill-printable" className="bg-white w-full max-w-[720px] p-8 text-[#111827]" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>
+          <div id="freight-bill-printable" className="bg-white w-full max-w-[720px] p-8 text-[#111827]" style={{ fontFamily: "Roboto, Arial, sans-serif", fontWeight: 400 }}>
             <p className="text-center text-[10px] tracking-wide mb-2">Subject to {company.jurisdiction || "Pune"} Jurisdiction</p>
             <div className="text-center border-2 border-[#111827] rounded-md px-4 pt-4 pb-3">
               <h1 className="text-3xl font-bold tracking-wide text-[#F97316]" style={{ letterSpacing: "1px" }}>SHREE BIROBA ROADLINES</h1>
@@ -894,7 +894,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
                     <td className="border-r border-[#111827] px-1 py-1 text-center">1</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center font-sans font-bold">{printDate(trip.date)}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.lrNumber || "-"}</td>
-                    <td className="border-r border-[#111827] px-1 py-1 text-center">{vehicle?.number || "-"}</td>
+                    <td className="border-r border-[#111827] px-1 py-1 text-center">{vehicle?.number || trip.manualVehicleNumber || "-"}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.pickup}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">
                       {trip.drop}
@@ -1098,17 +1098,18 @@ function SelectField({ label, value, onChange, options, allowManual = false, man
     </label>
   );
 }
-function VehicleSearchField({ label = "Vehicle No.", value, onChange, vehicles, valueKind }: { label?: string; value: string; onChange: (value: string) => void; vehicles: Vehicle[]; valueKind: "id" | "number" }) {
+function VehicleSearchField({ label = "Vehicle No.", value, onChange, vehicles, valueKind, onManualChange }: { label?: string; value: string; onChange: (value: string) => void; vehicles: Vehicle[]; valueKind: "id" | "number"; onManualChange?: (value: string) => void }) {
   const selected = vehicles.find((vehicle) => (valueKind === "id" ? vehicle.id : vehicle.number) === value);
   const [query, setQuery] = useState(selected?.number ?? value ?? "");
   const normalized = query.replace(/[^a-z0-9]/gi, "").toLowerCase();
   const matches = vehicles.filter((vehicle) => vehicle.number.replace(/[^a-z0-9]/gi, "").toLowerCase().includes(normalized)).slice(0, 8);
-  const choose = (vehicle: Vehicle) => { setQuery(vehicle.number); onChange(valueKind === "id" ? vehicle.id : vehicle.number); };
+  const choose = (vehicle: Vehicle) => { setQuery(vehicle.number); onChange(valueKind === "id" ? vehicle.id : vehicle.number); onManualChange?.(""); };
+  const chooseManual = () => { const manual = query.trim().toUpperCase(); if (!manual) return; setQuery(manual); if (valueKind === "number") onChange(manual); else onManualChange?.(manual); };
   return <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]">
     <span>{label}</span>
     <div className="relative mt-1.5">
-      <input value={query} onChange={(event) => { const next = event.target.value.toUpperCase(); setQuery(next); const exact = vehicles.find((vehicle) => vehicle.number.toLowerCase() === next.toLowerCase()); onChange(exact ? (valueKind === "id" ? exact.id : exact.number) : valueKind === "number" ? next : ""); }} placeholder="Type vehicle number, e.g. MH12 or 12" className="w-full rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1a1d2e]/10" />
-      {query && !selected && matches.length > 0 && <div className="absolute z-30 mt-1 w-full max-h-48 overflow-auto rounded-2xl border border-white/70 bg-white shadow-xl p-1">{matches.map((vehicle) => <button key={vehicle.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(vehicle)} className="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-100"><b>{vehicle.number}</b><span className="ml-2 text-xs text-[#8A94A6]">{vehicle.model}</span></button>)}</div>}
+      <input value={query} onChange={(event) => { const next = event.target.value.toUpperCase(); setQuery(next); const exact = vehicles.find((vehicle) => vehicle.number.toLowerCase() === next.toLowerCase()); onChange(exact ? (valueKind === "id" ? exact.id : exact.number) : valueKind === "number" ? next : ""); if (exact) onManualChange?.(""); }} placeholder="Type vehicle number, e.g. MH12 or 12" className="w-full rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1a1d2e]/10" />
+      {query && !selected && <div className="absolute z-30 mt-1 w-full max-h-48 overflow-auto rounded-2xl border border-white/70 bg-white shadow-xl p-1">{matches.map((vehicle) => <button key={vehicle.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(vehicle)} className="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-100"><b>{vehicle.number}</b><span className="ml-2 text-xs text-[#8A94A6]">{vehicle.model}</span></button>)}<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={chooseManual} className="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold text-blue-700 hover:bg-blue-50">Enter “{query}” manually <span className="ml-1 text-xs font-normal text-[#8A94A6]">(rented / unregistered)</span></button></div>}
     </div>
   </label>;
 }
@@ -1424,16 +1425,19 @@ export default function App() {
   }
   function saveTrip(files: UploadedFile[]) {
     const podUrls = files.map((file) => file.dataUrl).filter(Boolean);
+    let advances: AdvanceEntry[] = [];
+    try { advances = JSON.parse(form.advancesJson || "[]"); } catch { advances = []; }
+    const totalAdvance = advances.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
     if (form.id) {
       const existing = trips.find((trip) => trip.id === form.id);
       if (!existing) return;
       const updatedTrip: Trip = {
         ...existing,
-        customerId: form.customerId || existing.customerId, vehicleId: form.vehicleId || existing.vehicleId,
+        customerId: form.customerId || existing.customerId, vehicleId: form.vehicleId || "", manualVehicleNumber: form.manualVehicleNumber || undefined,
         pickup: form.pickup ?? existing.pickup, drop: form.drop ?? existing.drop, cargo: form.cargo ?? existing.cargo,
         size: form.size ?? existing.size, billNo: form.billNo?.trim() || existing.billNo || nextDocumentNumber(trips.map((trip) => trip.billNo)), chNo: form.chNo ?? existing.chNo,
         receivedDate: form.receivedDate ?? existing.receivedDate, date: form.date || existing.date,
-        freight: Number(form.freight || 0), advanceAmount: Number(form.advanceAmount || 0), otherExpenses: Number(form.otherCharges || 0),
+        freight: Number(form.freight || 0), advances, advanceAmount: totalAdvance, otherExpenses: Number(form.otherCharges || 0),
         otherChargesReason: form.otherChargesReason ?? existing.otherChargesReason,
         expenseRemarks: form.tripExpenseRemarksJson !== undefined ? parseTripExpenseRemarks(form.tripExpenseRemarksJson) : (existing.expenseRemarks ?? []),
         invoiceNumber: form.invoiceNumber ?? existing.invoiceNumber, paymentStatus: (form.paymentStatus || existing.paymentStatus || "Pending") as PaymentStatus,
@@ -1454,7 +1458,7 @@ export default function App() {
       return;
     }
     const assignedDriverId = vehicles.find((v) => v.id === form.vehicleId)?.currentDriverId || form.driverId || "";
-    const newTrip: Trip = { id: uid("TRIP"), lrNumber: uid("LR"), customerId: form.customerId, vehicleId: form.vehicleId, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo?.trim() || nextDocumentNumber(trips.map((trip) => trip.billNo)), chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advanceAmount: Number(form.advanceAmount || 0), tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", expenseRemarks: parseTripExpenseRemarks(form.tripExpenseRemarksJson), invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: podUrls, remarks: form.remarks || "" };
+    const newTrip: Trip = { id: uid("TRIP"), lrNumber: uid("LR"), customerId: form.customerId, vehicleId: form.vehicleId, manualVehicleNumber: form.manualVehicleNumber || undefined, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo?.trim() || nextDocumentNumber(trips.map((trip) => trip.billNo)), chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advances, advanceAmount: totalAdvance, tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", expenseRemarks: parseTripExpenseRemarks(form.tripExpenseRemarksJson), invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: podUrls, remarks: form.remarks || "" };
     setTrips((t) => [newTrip, ...t]);
     setVehicles((v) => v.map((x) => x.id === newTrip.vehicleId ? { ...x, status: "On Trip" } : x));
     if (assignedDriverId) { setDrivers((d) => d.map((x) => x.id === assignedDriverId ? { ...x, status: "On Trip", assignedVehicleId: newTrip.vehicleId } : x)); markAttendance(assignedDriverId, newTrip.date, "Present", `Auto-marked: vehicle ${vehicle(newTrip.vehicleId)?.number ?? ""} running trip ${newTrip.id}`); }
@@ -1737,7 +1741,7 @@ export default function App() {
     if (view === "liveTracking") return <LiveTracking vehicles={vehicles} drivers={drivers} trips={trips} telemetryLog={telemetryLog} />;
     if (view === "drivers") return <DriversWithDelete drivers={drivers} search={search} setSearch={setSearch} openModal={openModal} edit={(item) => openModal("driver", Object.fromEntries(Object.entries(item).filter(([k]) => k !== "documents").map(([k, v]) => [k, String(v)])))} select={(id) => { setSelected(id); openModal("driverDetails"); }} remove={deleteDriver} />;
     if (view === "customers") return <CustomersWithDelete customers={customers} trips={trips} search={search} setSearch={setSearch} openModal={openModal} remove={deleteCustomer} />;
-    if (view === "trips") return <TripsWithView trips={trips} customers={customers} vehicles={vehicles} drivers={drivers} role={role} search={search} setSearch={setSearch} openModal={openModal} updateTripStatus={updateTripStatus} setView={setView} exportCsv={exportCsv} onBill={openFreightBill} edit={(t) => openModal("trip", { ...Object.fromEntries(Object.entries(t).filter(([k]) => k !== "podDocs" && k !== "expenseRemarks").map(([k, v]) => [k, String(v ?? "")])), tripExpenseRemarksJson: JSON.stringify(t.expenseRemarks ?? []) })} remove={deleteTrip} onPodUpload={handlePodUpload} onView={setDocPreview} />;
+    if (view === "trips") return <TripsWithView trips={trips} customers={customers} vehicles={vehicles} drivers={drivers} role={role} search={search} setSearch={setSearch} openModal={openModal} updateTripStatus={updateTripStatus} setView={setView} exportCsv={exportCsv} onBill={openFreightBill} edit={(t) => openModal("trip", { ...Object.fromEntries(Object.entries(t).filter(([k]) => k !== "podDocs" && k !== "expenseRemarks" && k !== "advances").map(([k, v]) => [k, String(v ?? "")])), advancesJson: JSON.stringify(t.advances ?? []), tripExpenseRemarksJson: JSON.stringify(t.expenseRemarks ?? []) })} remove={deleteTrip} onPodUpload={handlePodUpload} onView={setDocPreview} />;
     if (view === "expenses" || view === "fuel") return <Expenses view={view} expenses={expenses} trips={trips} vehicles={vehicles} drivers={drivers} openModal={openModal} exportCsv={exportCsv} remove={(id) => {
       const record = expenses.find((item) => item.id === id);
       setExpenses((items) => items.filter((item) => item.id !== id));
@@ -2384,7 +2388,7 @@ function TripsWithView({ trips, customers, vehicles, drivers, role, search, setS
 }
 
 function Trips({ trips, customers, vehicles, drivers, role, search, setSearch, openModal, updateTripStatus, setView, exportCsv, onBill, edit, remove, onPodUpload }: { trips: Trip[]; customers: Customer[]; vehicles: Vehicle[]; drivers: Driver[]; role: Role; search: string; setSearch: (v: string) => void; openModal: (m: string) => void; updateTripStatus: (id: string, status: TripStatus) => void; setView: (v: View) => void; exportCsv: (n: string, rows: Record<string, string | number>[]) => void; onBill: (id: string) => void; edit: (trip: Trip) => void; remove: (id: string) => void; onPodUpload: (tripId: string, files: UploadedFile[]) => void }) {
-  const filtered = trips.filter((t) => `${t.id} ${t.lrNumber ?? ""} ${t.pickup} ${t.drop} ${t.cargo} ${t.cargoName ?? ""}`.toLowerCase().includes(search.toLowerCase()));
+  const filtered = trips.filter((t) => `${t.id} ${t.lrNumber ?? ""} ${t.manualVehicleNumber ?? ""} ${t.pickup} ${t.drop} ${t.cargo} ${t.cargoName ?? ""}`.toLowerCase().includes(search.toLowerCase()));
   const statusOptions: TripStatus[] = ["Draft", "Assigned", "In Transit", "Completed", "Cancelled"];
   return <div><Toolbar title={role === "driver" ? "My Bookings" : "Booking Register"} subtitle="LR, cargo, live tracking, POD upload, trip billing and status control" search={search} setSearch={setSearch} action={<>{role === "admin" && <button onClick={() => exportCsv("booking-register", trips.map((t) => ({ id: t.id, date: t.date, lrNumber: t.lrNumber ?? "", vehicleNo: vehicles.find((v) => v.id === t.vehicleId)?.number ?? "", driver: drivers.find((d) => d.id === t.driverId)?.name ?? "", partyName: customers.find((c) => c.id === t.customerId)?.company ?? "", from: t.pickup, to: t.drop, freight: t.freight, advance: t.advanceAmount ?? 0, balance: Math.max(t.freight - (t.advanceAmount ?? 0), 0), otherCharges: t.otherExpenses ?? 0, otherChargesReason: t.otherChargesReason ?? "", invoiceNumber: t.invoiceNumber ?? "", paymentStatus: t.paymentStatus ?? "", status: t.status, remarks: t.remarks ?? "" })))} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Download size={15} />Export Excel</button>}<button onClick={() => setView("tripReport")} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><FileText size={15} />Report</button>{role === "admin" && <button onClick={() => openModal("trip")} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />New Booking</button>}</>} />
     <DataCard>{filtered.map((t) => { const tripBreakdownTotal = (t.expenseRemarks ?? []).reduce((sum, item) => sum + item.amount, 0); const totalExpenses = (t.tollCharges ?? 0) + (t.driverAllowance ?? 0) + (t.otherExpenses ?? 0) + tripBreakdownTotal; const profit = t.freight - totalExpenses; return <Row key={t.id}><div className="w-10 h-10 rounded-xl bg-[#12151C] text-white flex items-center justify-center"><Route size={17} /></div><div className="flex-1 min-w-[260px]"><p className="text-sm font-semibold">{t.pickup} <ChevronRight size={12} className="inline" /> {t.drop}</p><p className="text-xs text-[#9CA3AF]">{t.lrNumber || "LR not assigned"} - {customers.find((c) => c.id === t.customerId)?.company} - {t.cargoName || t.cargo}</p><p className="text-xs text-[#9CA3AF]">Cargo: {t.materialType || "-"} - {t.weight || "-"} - Qty {t.quantity || "-"} - {t.date}{t.endDate ? ` to ${t.endDate}` : ""}</p>{t.remarks && <p className="text-xs text-[#9CA3AF] italic mt-0.5">Remarks: {t.remarks}</p>}</div><p className="hidden lg:block text-xs">{vehicles.find((v) => v.id === t.vehicleId)?.number}</p><p className="hidden lg:block text-xs">{drivers.find((d) => d.id === t.driverId)?.name}</p><div className="text-xs min-w-[170px]"><p className="font-bold">{rupees(t.freight)}</p><p className="text-[#9CA3AF]">Advance {rupees(t.advanceAmount ?? 0)}</p><p className={profit < 0 ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>P/L {rupees(profit)}</p></div><div className="text-xs min-w-[180px]"><p>Expenses {rupees(totalExpenses)}</p>{t.expenseRemarks?.map((item, index) => <p key={`${item.category}-${index}`} className="text-[#52708D] mt-0.5">{item.category} {rupees(item.amount)}{item.remark ? ` · ${item.remark}` : ""}</p>)}<p>Invoice {t.invoiceNumber || "-"}</p><Badge label={t.paymentStatus || "Pending"} /></div><select value={t.status} onChange={(e) => updateTripStatus(t.id, e.target.value as TripStatus)} className="rounded-xl px-3 py-2 text-xs font-semibold outline-none" style={glassSubtle}>{statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}</select>{role === "admin" && <button onClick={() => onBill(t.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}><Receipt size={13} />Bill</button>}{role === "admin" && <button onClick={() => edit(t)} className="px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}>Edit</button>}{role === "admin" && <button onClick={() => remove(t.id)} className="px-3 py-2 rounded-xl text-xs font-semibold text-white bg-red-600">Delete</button>}<FileField label="POD" category="pod" onFiles={(files) => onPodUpload(t.id, files)} /></Row>; })}</DataCard>
@@ -3047,19 +3051,32 @@ function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const availableVehicles = vehicles.filter((v) => v.status === "Available" || v.id === form.vehicleId);
   const freight = Number(form.freight || 0);
-  const advance = Number(form.advanceAmount || 0);
-  const bookingBalance = Math.max(freight - advance, 0);
+  const advances: AdvanceEntry[] = useMemo(() => { try { return JSON.parse(form.advancesJson || "[]"); } catch { return []; } }, [form.advancesJson]);
+  const setAdvances = (next: AdvanceEntry[]) => set("advancesJson", JSON.stringify(next));
+  const addAdvance = () => setAdvances([...advances, { date: form.date || today, mode: "Cash", amount: 0 }]);
+  const updateAdvance = (index: number, patch: Partial<AdvanceEntry>) => setAdvances(advances.map((entry, current) => current === index ? { ...entry, ...patch } : entry));
+  const removeAdvance = (index: number) => setAdvances(advances.filter((_, current) => current !== index));
+  const totalAdvance = advances.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+  const bookingBalance = Math.max(freight - totalAdvance, 0);
   const totalExpenses = Number(form.otherCharges || 0);
   return <>
     <FormSection title="Booking Register" />
     <Field label="Date" type="date" value={form.date || today} onChange={(v) => set("date", v)} />
-    <VehicleSearchField value={form.vehicleId || ""} onChange={(v) => set("vehicleId", v)} vehicles={availableVehicles} valueKind="id" />
+    <VehicleSearchField value={form.vehicleId || form.manualVehicleNumber || ""} onChange={(v) => { set("vehicleId", v); if (v) set("manualVehicleNumber", ""); }} onManualChange={(v) => { set("manualVehicleNumber", v); set("vehicleId", ""); }} vehicles={availableVehicles} valueKind="id" />
     <SelectField label="Party Name" value={form.customerId || ""} onChange={(v) => set("customerId", v)} options={[{ value: "", label: "Select party" }, ...customers.map((c) => ({ value: c.id, label: c.company }))]} />
     <Field label="Size" value={form.size || ""} onChange={(v) => set("size", v)} />
     <Field label="From" value={form.pickup || ""} onChange={(v) => set("pickup", v)} />
     <Field label="To" value={form.drop || ""} onChange={(v) => set("drop", v)} />
     <Field label="Freight" type="number" value={form.freight || ""} onChange={(v) => set("freight", v)} />
-    <Field label="Advance" type="number" value={form.advanceAmount || ""} onChange={(v) => set("advanceAmount", v)} />
+    <FormSection title="Advance Details" />
+    <div className="space-y-2 mb-3">{advances.map((entry, index) => <div key={index} className="flex items-center gap-2 rounded-2xl p-2" style={glassSubtle}>
+      <input type="date" value={entry.date} onChange={(event) => updateAdvance(index, { date: event.target.value })} className="rounded-xl px-2 py-2 text-xs outline-none flex-1 min-w-0" style={{ background: "rgba(255,255,255,0.6)" }} />
+      <input type="text" value={entry.mode} onChange={(event) => updateAdvance(index, { mode: event.target.value })} placeholder="Cash, Diesel Card, Bank" className="rounded-xl px-2 py-2 text-xs outline-none flex-[1.4] min-w-0" style={{ background: "rgba(255,255,255,0.6)" }} />
+      <input type="text" inputMode="decimal" value={entry.amount || ""} onChange={(event) => { const value = event.target.value; if (/^\d*\.?\d*$/.test(value)) updateAdvance(index, { amount: Number(value) || 0 }); }} placeholder="Amount" className="rounded-xl px-2 py-2 text-xs outline-none w-24" style={{ background: "rgba(255,255,255,0.6)" }} />
+      <button type="button" onClick={() => removeAdvance(index)} className="w-8 h-8 rounded-xl flex items-center justify-center text-red-600 bg-white/70 flex-shrink-0"><X size={13} /></button>
+    </div>)}</div>
+    <button type="button" onClick={addAdvance} className="w-full mb-3 flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-semibold" style={glassSubtle}><Plus size={13} />Add Advance Entry</button>
+    <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Total Advance: {rupees(totalAdvance)}</div>
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Balance: {rupees(bookingBalance)}</div>
     <Field label="Received Date" type="date" value={form.receivedDate || ""} onChange={(v) => set("receivedDate", v)} />
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Bill number is assigned automatically in sequence when you save this booking.</div>

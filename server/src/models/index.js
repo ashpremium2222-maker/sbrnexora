@@ -126,6 +126,8 @@ export const Trip = mongoose.model("Trip", new mongoose.Schema({
   durationHrs: { type: Number, default: 0 },
   freight: { type: Number, default: 0 },
   advanceAmount: { type: Number, default: 0 },
+  advances: [{ date: Date, amount: { type: Number, default: 0 }, mode: String, note: String }],
+  manualVehicleNumber: { type: String, trim: true, default: "" },
   tollCharges: { type: Number, default: 0 },
   driverAllowance: { type: Number, default: 0 },
   otherExpenses: { type: Number, default: 0 },
