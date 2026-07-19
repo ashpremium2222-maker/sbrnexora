@@ -903,6 +903,19 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
               </div>
               <p className="text-xs border-t border-[#111827] mt-2 pt-2 text-left px-2">We Hereby Submit Our Freight Bill For Transportation Of Your Goods As Under</p>
               <table className="w-full table-fixed text-[10px] border-collapse mt-1">
+                <colgroup>
+                  <col style={{ width: "4%" }} />
+                  <col style={{ width: "9%" }} />
+                  <col style={{ width: "9%" }} />
+                  <col style={{ width: "9%" }} />
+                  <col style={{ width: "7%" }} />
+                  <col style={{ width: "7%" }} />
+                  <col style={{ width: "7%" }} />
+                  <col style={{ width: "9%" }} />
+                  <col style={{ width: "6%" }} />
+                  <col style={{ width: "12%" }} />
+                  <col style={{ width: "21%" }} />
+                </colgroup>
                 <thead>
                   <tr className="border-t border-b border-[#111827]">
                     {["Sr.", "Date", "Lr No.", "Truck No.", "From", "To", "Size", "Weight", "Rate", "Freight", "All Charges"].map((h) => <th key={h} className="border-r border-[#111827] last:border-r-0 px-1 py-1 font-semibold">{h}</th>)}
@@ -1454,6 +1467,7 @@ export default function App() {
       const updatedTrip: Trip = {
         ...existing,
         customerId: form.customerId || existing.customerId, vehicleId: form.vehicleId || "", manualVehicleNumber: form.manualVehicleNumber || undefined,
+        lrNumber: form.lrNumber?.trim() || undefined,
         pickup: form.pickup ?? existing.pickup, drop: form.drop ?? existing.drop, cargo: form.cargo ?? existing.cargo,
         size: form.size ?? existing.size, billNo: form.billNo?.trim() || existing.billNo || nextDocumentNumber(trips.map((trip) => trip.billNo)), chNo: form.chNo ?? existing.chNo,
         receivedDate: form.receivedDate ?? existing.receivedDate, date: form.date || existing.date,
@@ -1478,7 +1492,7 @@ export default function App() {
       return;
     }
     const assignedDriverId = vehicles.find((v) => v.id === form.vehicleId)?.currentDriverId || form.driverId || "";
-    const newTrip: Trip = { id: uid("TRIP"), lrNumber: uid("LR"), customerId: form.customerId, vehicleId: form.vehicleId, manualVehicleNumber: form.manualVehicleNumber || undefined, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo?.trim() || nextDocumentNumber(trips.map((trip) => trip.billNo)), chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advances, advanceAmount: totalAdvance, tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", expenseRemarks: parseTripExpenseRemarks(form.tripExpenseRemarksJson), invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: podUrls, remarks: form.remarks || "" };
+    const newTrip: Trip = { id: uid("TRIP"), lrNumber: form.lrNumber?.trim() || undefined, customerId: form.customerId, vehicleId: form.vehicleId, manualVehicleNumber: form.manualVehicleNumber || undefined, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo?.trim() || nextDocumentNumber(trips.map((trip) => trip.billNo)), chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advances, advanceAmount: totalAdvance, tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", expenseRemarks: parseTripExpenseRemarks(form.tripExpenseRemarksJson), invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: podUrls, remarks: form.remarks || "" };
     setTrips((t) => [newTrip, ...t]);
     setVehicles((v) => v.map((x) => x.id === newTrip.vehicleId ? { ...x, status: "On Trip" } : x));
     if (assignedDriverId) { setDrivers((d) => d.map((x) => x.id === assignedDriverId ? { ...x, status: "On Trip", assignedVehicleId: newTrip.vehicleId } : x)); markAttendance(assignedDriverId, newTrip.date, "Present", `Auto-marked: vehicle ${vehicle(newTrip.vehicleId)?.number ?? ""} running trip ${newTrip.id}`); }
@@ -3082,6 +3096,7 @@ function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record
   return <>
     <FormSection title="Booking Register" />
     <Field label="Date" type="date" value={form.date || today} onChange={(v) => set("date", v)} />
+    <Field label="LR Number" value={form.lrNumber || ""} onChange={(v) => set("lrNumber", v)} />
     <VehicleSearchField value={form.vehicleId || form.manualVehicleNumber || ""} onChange={(v) => { set("vehicleId", v); if (v) set("manualVehicleNumber", ""); }} onManualChange={(v) => { set("manualVehicleNumber", v); set("vehicleId", ""); }} vehicles={availableVehicles} valueKind="id" />
     <SelectField label="Party Name" value={form.customerId || ""} onChange={(v) => set("customerId", v)} options={[{ value: "", label: "Select party" }, ...customers.map((c) => ({ value: c.id, label: c.company }))]} />
     <Field label="Size" value={form.size || ""} onChange={(v) => set("size", v)} />
