@@ -853,9 +853,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
   const detention = trip.otherExpenses ?? 0;
   const amount = trip.freight + detention;
   const balance = Math.max(amount - advance, 0);
-  // Older saves keep the Detention amount in `otherExpenses`; newer saves can
-  // also include it in the trip-breakdown list.  It is one charge, so only
-  // render it once on the bill when both representations describe it.
+  
   const normalizedChargeName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
   const detentionName = trip.otherChargesReason || "Detention";
   const breakdownCharges = (trip.expenseRemarks ?? []).filter((item) => {
@@ -864,6 +862,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
     const sameAmount = Number(item.amount) === Number(detention);
     return !(detention > 0 && isDetention && sameAmount);
   });
+  
   const allCharges = [
     ...(advance > 0 ? [["Advance", advance] as const] : []),
     ...(detention > 0 ? [[detentionName, detention] as const] : []),
@@ -871,11 +870,66 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
     ...(trip.tollCharges ? [["Toll / FASTag", trip.tollCharges] as const] : []),
     ...(trip.driverAllowance ? [["Driver Allowance", trip.driverAllowance] as const] : []),
   ];
+
+  const totalAllCharges = allCharges.reduce((sum, [, val]) => sum + val, 0);
+
   const printDate = (value?: string) => {
     if (!value) return "-";
     const [year, month, day] = value.slice(0, 10).split("-");
     return year && month && day ? `${day}-${month}-${year}` : value;
   };
+
+  const defaultWidths = [4, 9, 9, 10, 14, 14, 9, 7, 12, 12];
+  const [colWidths, setColWidths] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem("freightBillColWidths");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.length === 10) return parsed;
+      }
+    } catch (e) {}
+    return defaultWidths;
+  });
+
+  const onDragStart = (index: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.pageX;
+    const startLeftWidth = colWidths[index];
+    const startRightWidth = colWidths[index + 1];
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.pageX - startX;
+      const tableWidth = document.getElementById("freight-bill-printable")?.clientWidth || 720;
+      const deltaPercent = (deltaX / tableWidth) * 100;
+
+      setColWidths(prev => {
+        const newWidths = [...prev];
+        const newLeft = startLeftWidth + deltaPercent;
+        const newRight = startRightWidth - deltaPercent;
+
+        if (newLeft >= 2 && newRight >= 2) {
+          newWidths[index] = newLeft;
+          newWidths[index + 1] = newRight;
+        }
+        return newWidths;
+      });
+    };
+
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      setColWidths(prev => {
+        localStorage.setItem("freightBillColWidths", JSON.stringify(prev));
+        return prev;
+      });
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  };
+
+  const headers = ["Sr.", "Date", "Lr No.", "Vehicle No.", "From", "To", "Size", "Weight", "Freight", "All Charges"];
+
   return (
     <div className="fixed inset-0 bg-[#1a1d2e]/45 backdrop-blur-sm z-[80] flex items-center justify-center p-4" onMouseDown={onClose}>
       <div className="w-full max-w-3xl max-h-[92vh] rounded-[20px] overflow-hidden flex flex-col bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -904,21 +958,23 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
               <p className="text-xs border-t border-[#111827] mt-2 pt-2 text-left px-2">We Hereby Submit Our Freight Bill For Transportation Of Your Goods As Under</p>
               <table className="w-full table-fixed text-[10px] border-collapse mt-1">
                 <colgroup>
-                  <col style={{ width: "4%" }} />
-                  <col style={{ width: "9%" }} />
-                  <col style={{ width: "9%" }} />
-                  <col style={{ width: "9%" }} />
-                  <col style={{ width: "7%" }} />
-                  <col style={{ width: "7%" }} />
-                  <col style={{ width: "7%" }} />
-                  <col style={{ width: "9%" }} />
-                  <col style={{ width: "6%" }} />
-                  <col style={{ width: "12%" }} />
-                  <col style={{ width: "21%" }} />
+                  {colWidths.map((w, i) => (
+                    <col key={i} style={{ width: `${w}%` }} />
+                  ))}
                 </colgroup>
                 <thead>
                   <tr className="border-t border-b border-[#111827]">
-                    {["Sr.", "Date", "Lr No.", "Truck No.", "From", "To", "Size", "Weight", "Rate", "Freight", "All Charges"].map((h) => <th key={h} className="border-r border-[#111827] last:border-r-0 px-1 py-1 font-semibold">{h}</th>)}
+                    {headers.map((h, index) => (
+                      <th key={h} className="border-r border-[#111827] last:border-r-0 px-1 py-1 font-semibold relative group select-none">
+                        {h}
+                        {index < headers.length - 1 && (
+                          <div
+                            onMouseDown={(e) => onDragStart(index, e)}
+                            className="absolute right-[-4px] top-0 bottom-0 w-[8px] cursor-col-resize z-10 hover:bg-black/20 no-print"
+                          />
+                        )}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -934,31 +990,38 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
                     </td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.size || "-"}</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.weight || "-"}</td>
-                    <td className="border-r border-[#111827] px-1 py-1 text-center">Fix</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-right align-top">{trip.freight.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                    <td className="px-1 py-1 text-right align-top">{allCharges.length ? allCharges.map(([label, value], index) => <p key={`${label}-${index}`} className="mb-1"><span className="block text-left">{label}</span>{value.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>) : "-"}</td>
+                    <td className="px-1 py-1 text-right align-top font-bold">{totalAllCharges > 0 ? totalAllCharges.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}</td>
                   </tr>
-                  {Array.from({ length: 6 }).map((_, rowIndex) => (
+                  {allCharges.length > 0 && (
+                    <tr className="align-top border-b border-[#111827]/30">
+                      <td colSpan={10} className="px-2 py-1.5 text-left text-[9px] text-gray-800 leading-tight">
+                        <span className="font-semibold">Charges Breakdown: </span>
+                        {allCharges.map(([label, value]) => `${label} ₹${value.toLocaleString("en-IN")}`).join(" | ")}
+                      </td>
+                    </tr>
+                  )}
+                  {Array.from({ length: allCharges.length > 0 ? 5 : 6 }).map((_, rowIndex) => (
                     <tr key={rowIndex}>
-                      {Array.from({ length: 11 }).map((__, columnIndex) => (
-                        <td key={columnIndex} className={`h-6 ${columnIndex < 10 ? "border-r border-[#111827]" : ""}`}>&nbsp;</td>
+                      {Array.from({ length: 10 }).map((__, columnIndex) => (
+                        <td key={columnIndex} className={`h-6 ${columnIndex < 9 ? "border-r border-[#111827]" : ""}`}>&nbsp;</td>
                       ))}
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-[#111827]">
-                    <td colSpan={8} className="align-bottom px-1 py-1 text-left text-[10px] italic">{trip.remarks || ""}</td>
+                    <td colSpan={7} className="align-bottom px-1 py-1 text-left text-[10px] italic">{trip.remarks || ""}</td>
                     <td colSpan={2} className="border-l border-[#111827] px-2 py-1 text-right font-semibold">Amount</td>
                     <td className="border-l border-[#111827] px-2 py-1 text-right">{amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   </tr>
                   <tr>
-                    <td colSpan={8}></td>
+                    <td colSpan={7}></td>
                     <td colSpan={2} className="border-l border-[#111827] px-2 py-1 text-right font-semibold">Advance</td>
                     <td className="border-l border-[#111827] px-2 py-1 text-right">{advance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   </tr>
                   <tr className="border-b border-[#111827]">
-                    <td colSpan={8}></td>
+                    <td colSpan={7}></td>
                     <td colSpan={2} className="border-l border-t border-[#111827] px-2 py-1 text-right font-semibold">Balance</td>
                     <td className="border-l border-t border-[#111827] px-2 py-1 text-right font-bold">{balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   </tr>
