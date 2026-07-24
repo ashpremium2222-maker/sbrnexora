@@ -975,7 +975,10 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
           <div id="freight-bill-printable" className="bg-white w-full max-w-[720px] p-8 text-[#111827]" style={{ fontFamily: "Roboto, Arial, sans-serif", fontWeight: 400 }}>
             <p className="text-center text-[10px] tracking-wide mb-2">Subject to {company.jurisdiction || "Pune"} Jurisdiction</p>
             <div className="text-center border-2 border-[#111827] rounded-md px-4 pt-4 pb-3">
-              <h1 className="text-3xl font-bold tracking-wide text-[#F97316]" style={{ letterSpacing: "1px" }}>SHREE BIROBA ROADLINES</h1>
+              <div className="flex items-center justify-center gap-4">
+                <img src="/sbr-logo-new.png" alt="Logo" className="h-16 w-auto object-contain" />
+                <h1 className="text-3xl tracking-wide text-[#F97316]" style={{ fontFamily: "'Angular-Odyssey', sans-serif", letterSpacing: "1px" }}>SHREE BIROBA ROADLINES</h1>
+              </div>
               <p className="text-xs mt-1" style={{ fontFamily: "Roboto, Arial, sans-serif", fontWeight: 700 }}>Transport Contractor & Carrying Heavy & ODC Size Consignment Services</p>
               <p className="text-xs mt-1">{company.address}</p>
               <p className="text-xs">
