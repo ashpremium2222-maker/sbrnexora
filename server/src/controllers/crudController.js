@@ -33,12 +33,19 @@ function cleanPayload(payload = {}) {
   return result;
 }
 
-export function crudController(Model, { populate = "" } = {}) {
+export function crudController(Model, { populate = "", searchFields = [] } = {}) {
   return {
     async list(req, res, next) {
       try {
         const { q, sort = "-createdAt", page = 1, limit = 25 } = req.query;
-        const query = q ? { $text: { $search: q } } : {};
+        let query = {};
+        if (q) {
+          if (searchFields.length > 0) {
+            query = { $or: searchFields.map(field => ({ [field]: { $regex: q, $options: "i" } })) };
+          } else {
+            query = { $text: { $search: q } };
+          }
+        }
         const skip = (Number(page) - 1) * Number(limit);
         const [items, total] = await Promise.all([
           Model.find(query).sort(sort).skip(skip).limit(Number(limit)).populate(populate),

@@ -148,7 +148,7 @@ function mapTripFromApi(doc: Record<string, unknown>): Trip {
 }
 function tripToApiPayload(item: Trip) {
   return {
-    customer: isMongoId(item.customerId) ? item.customerId : undefined, vehicle: isMongoId(item.vehicleId) ? item.vehicleId : undefined, driver: isMongoId(item.driverId) ? item.driverId : undefined,
+    customer: isMongoId(item.customerId) ? item.customerId : undefined, partyName: item.partyName, vehicle: isMongoId(item.vehicleId) ? item.vehicleId : undefined, driver: isMongoId(item.driverId) ? item.driverId : undefined,
     pickup: item.pickup, drop: item.drop, lrNumber: item.lrNumber, cargoName: item.cargoName, materialType: item.materialType, weight: item.weight, quantity: item.quantity, cargo: item.cargo,
     date: item.date || undefined, endDate: item.endDate || undefined, distanceKm: item.distanceKm, durationHrs: item.durationHrs, freight: item.freight, advanceAmount: item.advanceAmount, advances: item.advances || [], manualVehicleNumber: item.manualVehicleNumber || undefined,
     tollCharges: item.tollCharges, driverAllowance: item.driverAllowance, otherExpenses: item.otherExpenses, invoiceNumber: item.invoiceNumber, paymentStatus: item.paymentStatus,
@@ -326,7 +326,7 @@ type Trip = {
   advanceAmount?: number; advances?: AdvanceEntry[]; manualVehicleNumber?: string; tollCharges?: number; driverAllowance?: number; otherExpenses?: number; otherChargesReason?: string; expenseRemarks?: TripExpenseRemark[]; invoiceNumber?: string; paymentStatus?: PaymentStatus;
   ewayBill?: string; deliveryReceipt?: string;
   size?: string; billNo?: string; chNo?: string; receivedDate?: string;
-  podDocs: string[]; remarks?: string;
+  podDocs: string[]; remarks?: string; partyName?: string;
 };
 type TelemetryLogEntry = { time: string; speed: number; fuelLevel: number; ignition: "ON" | "OFF"; location: string };
 type StopEvent = { location: string; start: string; end: string | null; ticks: number };
@@ -1254,6 +1254,90 @@ function SelectField({ label, value, onChange, options, allowManual = false, man
     </label>
   );
 }
+
+function AutocompleteField({ label, value, onChange, endpoint, extractLabel, extractValue }: { label: string; value: string; onChange: (v: string) => void; endpoint: string; extractLabel: (item: any) => string; extractValue?: (item: any) => string }) {
+  const [open, setOpen] = useState(false);
+  const [options, setOptions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [inputValue, setInputValue] = useState(value);
+  const [debouncedQuery, setDebouncedQuery] = useState(value);
+
+  useEffect(() => { setInputValue(value); }, [value]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(inputValue), 250);
+    return () => clearTimeout(t);
+  }, [inputValue]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    let isActive = true;
+    const fetchOptions = async () => {
+      setLoading(true);
+      try {
+        const query = debouncedQuery ? `?q=${encodeURIComponent(debouncedQuery)}` : "";
+        const data = await apiFetch(`${endpoint}${query}`, currentAuthToken);
+        if (isActive) setOptions(data.items || []);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (isActive) setLoading(false);
+      }
+    };
+    fetchOptions();
+    return () => { isActive = false; };
+  }, [debouncedQuery, open, endpoint]);
+
+  return (
+    <div className="relative mb-4" ref={wrapperRef}>
+      <label className="block text-sm font-semibold text-[#1a1d2e]">{label}</label>
+      <input 
+        type="text" 
+        value={inputValue} 
+        onChange={(e) => { 
+           setInputValue(e.target.value);
+           onChange(e.target.value); 
+           setOpen(true); 
+        }} 
+        onFocus={() => setOpen(true)}
+        className="mt-1.5 w-full rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1a1d2e]/10" 
+        placeholder="Type to search or add new..."
+      />
+      {open && (options.length > 0 || loading) && (
+        <div className="absolute z-50 mt-1 w-full rounded-xl border border-white/60 bg-white/95 p-1 shadow-lg backdrop-blur-md max-h-48 overflow-y-auto">
+          {loading ? (
+            <div className="px-3 py-2 text-xs text-[#1a1d2e]/60">Loading...</div>
+          ) : (
+            options.map((opt, i) => (
+              <div 
+                key={i} 
+                className="cursor-pointer rounded-lg px-3 py-2 text-sm text-[#1a1d2e] hover:bg-black/5"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  const finalVal = extractValue ? extractValue(opt) : extractLabel(opt);
+                  setInputValue(finalVal);
+                  onChange(finalVal);
+                  setOpen(false);
+                }}
+              >
+                {extractLabel(opt)}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 function VehicleSearchField({ label = "Vehicle No.", value, onChange, vehicles, valueKind, onManualChange }: { label?: string; value: string; onChange: (value: string) => void; vehicles: Vehicle[]; valueKind: "id" | "number"; onManualChange?: (value: string) => void }) {
   const selected = vehicles.find((vehicle) => (valueKind === "id" ? vehicle.id : vehicle.number) === value);
   const [query, setQuery] = useState(selected?.number ?? value ?? "");
@@ -1592,7 +1676,7 @@ export default function App() {
       if (!existing) return;
       const updatedTrip: Trip = {
         ...existing,
-        customerId: form.customerId || existing.customerId, vehicleId: form.vehicleId || "", manualVehicleNumber: form.manualVehicleNumber || undefined,
+        customerId: form.partyName ? undefined : (form.customerId ?? existing.customerId), partyName: form.partyName, vehicleId: form.vehicleId || "", manualVehicleNumber: form.manualVehicleNumber || undefined,
         lrNumber: form.lrNumber?.trim() || undefined,
         pickup: form.pickup ?? existing.pickup, drop: form.drop ?? existing.drop, cargo: form.cargo ?? existing.cargo,
         size: form.size ?? existing.size, billNo: form.billNo?.trim() || existing.billNo || nextDocumentNumber(trips.map((trip) => trip.billNo)), chNo: form.chNo ?? existing.chNo,
@@ -1618,7 +1702,7 @@ export default function App() {
       return;
     }
     const assignedDriverId = vehicles.find((v) => v.id === form.vehicleId)?.currentDriverId || form.driverId || "";
-    const newTrip: Trip = { id: uid("TRIP"), lrNumber: form.lrNumber?.trim() || undefined, customerId: form.customerId, vehicleId: form.vehicleId, manualVehicleNumber: form.manualVehicleNumber || undefined, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo?.trim() || nextDocumentNumber(trips.map((trip) => trip.billNo)), chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advances, advanceAmount: totalAdvance, tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", expenseRemarks: parseTripExpenseRemarks(form.tripExpenseRemarksJson), invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: podUrls, remarks: form.remarks || "" };
+    const newTrip: Trip = { id: uid("TRIP"), lrNumber: form.lrNumber?.trim() || undefined, customerId: form.partyName ? "" : form.customerId, partyName: form.partyName, vehicleId: form.vehicleId, manualVehicleNumber: form.manualVehicleNumber || undefined, driverId: assignedDriverId, pickup: form.pickup, drop: form.drop, cargo: form.cargo || "", size: form.size || "", billNo: form.billNo?.trim() || nextDocumentNumber(trips.map((trip) => trip.billNo)), chNo: form.chNo || "", receivedDate: form.receivedDate || "", date: form.date || today, distanceKm: 0, durationHrs: 0, freight: Number(form.freight || 0), advances, advanceAmount: totalAdvance, tollCharges: 0, driverAllowance: 0, otherExpenses: Number(form.otherCharges || 0), otherChargesReason: form.otherChargesReason || "", expenseRemarks: parseTripExpenseRemarks(form.tripExpenseRemarksJson), invoiceNumber: form.invoiceNumber || "", paymentStatus: (form.paymentStatus || "Pending") as PaymentStatus, ewayBill: form.ewayBill || "", deliveryReceipt: form.deliveryReceipt || "", status: "Assigned", podDocs: podUrls, remarks: form.remarks || "" };
     setTrips((t) => [newTrip, ...t]);
     setVehicles((v) => v.map((x) => x.id === newTrip.vehicleId ? { ...x, status: "On Trip" } : x));
     if (assignedDriverId) { setDrivers((d) => d.map((x) => x.id === assignedDriverId ? { ...x, status: "On Trip", assignedVehicleId: newTrip.vehicleId } : x)); markAttendance(assignedDriverId, newTrip.date, "Present", `Auto-marked: vehicle ${vehicle(newTrip.vehicleId)?.number ?? ""} running trip ${newTrip.id}`); }
@@ -3224,10 +3308,11 @@ function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record
     <Field label="Date" type="date" value={form.date || today} onChange={(v) => set("date", v)} />
     <Field label="LR Number" value={form.lrNumber || ""} onChange={(v) => set("lrNumber", v)} />
     <VehicleSearchField value={form.vehicleId || form.manualVehicleNumber || ""} onChange={(v) => { set("vehicleId", v); if (v) set("manualVehicleNumber", ""); }} onManualChange={(v) => { set("manualVehicleNumber", v); set("vehicleId", ""); }} vehicles={availableVehicles} valueKind="id" />
-    <SelectField label="Party Name" value={form.customerId || ""} onChange={(v) => set("customerId", v)} options={[{ value: "", label: "Select party" }, ...customers.map((c) => ({ value: c.id, label: c.company }))]} />
-    <Field label="Size" value={form.size || ""} onChange={(v) => set("size", v)} />
-    <Field label="From" value={form.pickup || ""} onChange={(v) => set("pickup", v)} />
-    <Field label="To" value={form.drop || ""} onChange={(v) => set("drop", v)} />
+    <AutocompleteField label="Party Name" value={form.partyName || (customers.find(c => c.id === form.customerId)?.company) || ""} onChange={(v) => { set("partyName", v); set("customerId", ""); }} endpoint="/customers" extractLabel={(c) => c.company} />
+    <AutocompleteField label="Size" value={form.size || ""} onChange={(v) => set("size", v)} endpoint="/sizes" extractLabel={(o) => o.value} extractValue={(o) => o.value} />
+    <AutocompleteField label="From" value={form.pickup || ""} onChange={(v) => set("pickup", v)} endpoint="/locations" extractLabel={(o) => o.name} extractValue={(o) => o.name} />
+    <AutocompleteField label="To" value={form.drop || ""} onChange={(v) => set("drop", v)} endpoint="/locations" extractLabel={(o) => o.name} extractValue={(o) => o.name} />
+    <AutocompleteField label="Weight" value={form.weight || ""} onChange={(v) => set("weight", v)} endpoint="/weights" extractLabel={(o) => o.value} extractValue={(o) => o.value} />
     <Field label="Freight" type="number" value={form.freight || ""} onChange={(v) => set("freight", v)} />
     <FormSection title="Advance Details" />
     <div className="space-y-2 mb-3">{advances.map((entry, index) => <div key={index} className="flex items-center gap-2 rounded-2xl p-2" style={glassSubtle}>
@@ -3334,12 +3419,12 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
     <Field label="Date" type="date" value={form.loadingDate || today} onChange={(v) => set("loadingDate", v)} />
     <VehicleSearchField value={form.vehicleNumber || ""} onChange={(v) => set("vehicleNumber", v)} vehicles={vehicles} valueKind="number" />
     <Field label="Owner Name" value={form.ownerName || ""} onChange={(v) => set("ownerName", v)} />
-    <Field label="Party Name" value={form.partyName || ""} onChange={(v) => set("partyName", v)} />
-    <Field label="From" value={form.from || ""} onChange={(v) => set("from", v)} />
-    <Field label="To" value={form.to || ""} onChange={(v) => set("to", v)} />
+    <AutocompleteField label="Party Name" value={form.partyName || ""} onChange={(v) => set("partyName", v)} endpoint="/customers" extractLabel={(c) => c.company} extractValue={(c) => c.company} />
+    <AutocompleteField label="From" value={form.from || ""} onChange={(v) => set("from", v)} endpoint="/locations" extractLabel={(o) => o.name} extractValue={(o) => o.name} />
+    <AutocompleteField label="To" value={form.to || ""} onChange={(v) => set("to", v)} endpoint="/locations" extractLabel={(o) => o.name} extractValue={(o) => o.name} />
     <Field label="CN No." value={form.cnNo || ""} onChange={(v) => set("cnNo", v)} />
-    <Field label="Size" value={form.size || ""} onChange={(v) => set("size", v)} />
-    <Field label="Weight" value={form.weight || ""} onChange={(v) => set("weight", v)} />
+    <AutocompleteField label="Size" value={form.size || ""} onChange={(v) => set("size", v)} endpoint="/sizes" extractLabel={(o) => o.value} extractValue={(o) => o.value} />
+    <AutocompleteField label="Weight" value={form.weight || ""} onChange={(v) => set("weight", v)} endpoint="/weights" extractLabel={(o) => o.value} extractValue={(o) => o.value} />
     <Field label="Freight" type="number" value={form.freight || ""} onChange={(v) => set("freight", v)} />
 
     <FormSection title="Advance Details" />

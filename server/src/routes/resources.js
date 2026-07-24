@@ -1,5 +1,5 @@
 import express from "express";
-import { Attendance, AuditLog, BalanceFreight, CompanyExpense, CompanyProfile, Customer, DocumentRecord, Driver, EmiReminder, Expense, Invoice, Maintenance, Notification, Payment, Payroll, Trip, Vehicle } from "../models/index.js";
+import { Attendance, AuditLog, BalanceFreight, CompanyExpense, CompanyProfile, Customer, DocumentRecord, Driver, EmiReminder, Expense, Invoice, Maintenance, Notification, Payment, Payroll, Trip, Vehicle, Location, Size, Weight } from "../models/index.js";
 import { crudController } from "../controllers/crudController.js";
 import { authorize } from "../middleware/auth.js";
 
@@ -63,7 +63,10 @@ router.delete("/attendance/entry", authorize("admin", "manager"), async (req, re
 const resources = {
   vehicles: [Vehicle, {}],
   drivers: [Driver, {}],
-  customers: [Customer, {}],
+  customers: [Customer, { searchFields: ["company"] }],
+  locations: [Location, { searchFields: ["name"] }],
+  sizes: [Size, { searchFields: ["value"] }],
+  weights: [Weight, { searchFields: ["value"] }],
   trips: [Trip, { populate: "customer vehicle driver" }],
   expenses: [Expense, { populate: "trip" }],
   companyExpenses: [CompanyExpense, {}],

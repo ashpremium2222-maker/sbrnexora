@@ -106,10 +106,11 @@ export const Customer = mongoose.model("Customer", new mongoose.Schema({
   creditLimit: { type: Number, default: 0 },
 }, { timestamps: true }));
 
-export const Trip = mongoose.model("Trip", new mongoose.Schema({
+const tripSchema = new mongoose.Schema({
   // Existing records were created before linked IDs were enforced. Keeping
   // them optional prevents old bookings from blocking document updates.
   customer: { type: mongoose.Schema.Types.ObjectId, ref: "Customer" },
+  partyName: { type: String, trim: true },
   vehicle: { type: mongoose.Schema.Types.ObjectId, ref: "Vehicle" },
   driver: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },
   pickup: { type: String, default: "" },
@@ -149,7 +150,25 @@ export const Trip = mongoose.model("Trip", new mongoose.Schema({
   status: { type: String, enum: ["Draft", "Assigned", "In Transit", "Completed", "Cancelled"], default: "Assigned" },
   profitAnalysis: moneyBreakdownSchema,
   podDocs: [documentSchema],
-}, { timestamps: true }));
+}, { timestamps: true });
+
+tripSchema.pre("validate", async function (next) {
+  if (this.partyName && !this.customer) {
+    try {
+      let cust = await mongoose.model("Customer").findOneAndUpdate(
+        { company: new RegExp(`^${this.partyName.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") },
+        { $setOnInsert: { company: this.partyName.trim() } },
+        { upsert: true, new: true }
+      );
+      if (cust) this.customer = cust._id;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  next();
+});
+
+export const Trip = mongoose.model("Trip", tripSchema);
 
 export const Expense = mongoose.model("Expense", new mongoose.Schema({
   trip: { type: mongoose.Schema.Types.ObjectId, ref: "Trip" },
@@ -393,3 +412,64 @@ export const CompanyProfile = mongoose.model("CompanyProfile", new mongoose.Sche
   bankAccount: String,
   bankIfsc: String,
 }, { timestamps: true }));
+
+export const Location = mongoose.model("Location", new mongoose.Schema({
+  name: { type: String, required: true, trim: true },
+  usageCount: { type: Number, default: 1 },
+  lastUsedAt: { type: Date, default: Date.now },
+}, { timestamps: true }).index({ name: "text" }));
+
+export const Size = mongoose.model("Size", new mongoose.Schema({
+  value: { type: String, required: true, trim: true },
+  usageCount: { type: Number, default: 1 },
+  lastUsedAt: { type: Date, default: Date.now },
+}, { timestamps: true }).index({ value: "text" }));
+
+export const Weight = mongoose.model("Weight", new mongoose.Schema({
+  value: { type: String, required: true, trim: true },
+  usageCount: { type: Number, default: 1 },
+  lastUsedAt: { type: Date, default: Date.now },
+}, { timestamps: true }).index({ value: "text" }));
+
+async function handleMasterDataUpsert(doc) {
+  if (doc.partyName && doc.partyName.trim()) {
+    await mongoose.model("Customer").findOneAndUpdate(
+      { company: new RegExp(`^${doc.partyName.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") },
+      { $setOnInsert: { company: doc.partyName.trim() } },
+      { upsert: true }
+    ).catch(console.error);
+  }
+
+  const locs = [];
+  if (doc.pickup) locs.push(doc.pickup);
+  if (doc.drop) locs.push(doc.drop);
+  if (doc.from) locs.push(doc.from);
+  if (doc.to) locs.push(doc.to);
+  
+  for (const loc of locs) {
+    if (loc && loc.trim()) {
+      await Location.findOneAndUpdate(
+        { name: new RegExp(`^${loc.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") },
+        { $inc: { usageCount: 1 }, $set: { name: loc.trim(), lastUsedAt: new Date() } },
+        { upsert: true }
+      ).catch(console.error);
+    }
+  }
+  if (doc.size && doc.size.trim()) {
+    await Size.findOneAndUpdate(
+      { value: new RegExp(`^${doc.size.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") },
+      { $inc: { usageCount: 1 }, $set: { value: doc.size.trim(), lastUsedAt: new Date() } },
+      { upsert: true }
+    ).catch(console.error);
+  }
+  if (doc.weight && doc.weight.trim()) {
+    await Weight.findOneAndUpdate(
+      { value: new RegExp(`^${doc.weight.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") },
+      { $inc: { usageCount: 1 }, $set: { value: doc.weight.trim(), lastUsedAt: new Date() } },
+      { upsert: true }
+    ).catch(console.error);
+  }
+}
+
+tripSchema.post("save", handleMasterDataUpsert);
+balanceFreightSchema.post("save", handleMasterDataUpsert);
