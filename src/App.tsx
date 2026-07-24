@@ -1024,16 +1024,17 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
                     
                     {/* FREIGHT COLUMN */}
                     <td className="border-r border-[#111827] p-0 align-top">
-                      <div className="flex flex-col h-full">
-                        <div className="p-1 text-right font-bold border-b border-[#111827] flex items-center justify-end min-h-[26px]">
+                      <div className="flex flex-col h-full w-full min-w-0">
+                        <div className="p-1 text-right font-bold border-b border-[#111827] min-h-[26px] break-all">
                           {trip.freight.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                         </div>
-                        <div className="flex-1 flex flex-col pt-0.5 pb-1">
+                        <div className="flex-1 flex flex-col pt-0.5 pb-1 w-full min-w-0">
                           {allCharges.map((c, i) => (
                             <div 
                               key={i} 
                               ref={el => chargeRefs.current[i] = el}
-                              className="px-1 py-0.5 text-left text-[9px] leading-tight flex items-center"
+                              className="px-1 py-0.5 text-left text-[9px] leading-tight whitespace-normal break-words"
+                              style={{ wordWrap: 'break-word', overflowWrap: 'break-word', minHeight: '20px' }}
                             >
                               {c[0]}
                             </div>
@@ -1044,16 +1045,16 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
                     
                     {/* ALL CHARGES COLUMN */}
                     <td className="p-0 align-top">
-                      <div className="flex flex-col h-full">
-                        <div className="p-1 text-right font-bold border-b border-[#111827] flex items-center justify-end min-h-[26px]">
+                      <div className="flex flex-col h-full w-full min-w-0">
+                        <div className="p-1 text-right font-bold border-b border-[#111827] min-h-[26px] break-all">
                           {totalAllCharges > 0 ? totalAllCharges.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}
                         </div>
-                        <div className="flex-1 flex flex-col pt-0.5 pb-1">
+                        <div className="flex-1 flex flex-col pt-0.5 pb-1 w-full min-w-0">
                           {allCharges.map((c, i) => (
                             <div 
                               key={i} 
-                              className="px-1 py-0.5 text-right text-[9px] leading-tight flex items-center justify-end font-sans"
-                              style={{ height: chargeHeights[i] ? `${chargeHeights[i]}px` : 'auto' }}
+                              className="px-1 py-0.5 text-right text-[9px] leading-tight flex items-center justify-end font-sans whitespace-normal break-words"
+                              style={{ height: chargeHeights[i] ? `${chargeHeights[i]}px` : 'auto', minHeight: '20px' }}
                             >
                               {c[1].toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                             </div>
