@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   AlertTriangle, BarChart3, Bell, Building2, Calendar, CheckCircle2, ChevronRight, ClipboardList,
   CreditCard, Download, Eye, FileText, Filter, Fuel, IndianRupee, LayoutDashboard, LogOut,
@@ -879,7 +879,7 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
     return year && month && day ? `${day}-${month}-${year}` : value;
   };
 
-  const defaultWidths = [4, 9, 9, 10, 14, 14, 9, 7, 12, 12];
+  const defaultWidths = [4, 8, 8, 10, 15, 15, 8, 7, 16, 9];
   const [colWidths, setColWidths] = useState<number[]>(() => {
     try {
       const saved = localStorage.getItem("freightBillColWidths");
@@ -930,6 +930,37 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
 
   const headers = ["Sr.", "Date", "Lr No.", "Vehicle No.", "From", "To", "Size", "Weight", "Freight", "All Charges"];
 
+  const chargeRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [chargeHeights, setChargeHeights] = useState<number[]>([]);
+
+  useEffect(() => {
+    if (!chargeRefs.current.length || !allCharges.length) return;
+    
+    const observer = new ResizeObserver((entries) => {
+      setChargeHeights(prev => {
+        const newHeights = [...prev];
+        let changed = false;
+        entries.forEach(entry => {
+          const index = chargeRefs.current.findIndex(el => el === entry.target);
+          if (index !== -1) {
+            const h = (entry.target as HTMLElement).offsetHeight;
+            if (newHeights[index] !== h) {
+              newHeights[index] = h;
+              changed = true;
+            }
+          }
+        });
+        return changed ? newHeights : prev;
+      });
+    });
+
+    chargeRefs.current.forEach(el => {
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, [allCharges]);
+
   return (
     <div className="fixed inset-0 bg-[#1a1d2e]/45 backdrop-blur-sm z-[80] flex items-center justify-center p-4" onMouseDown={onClose}>
       <div className="w-full max-w-3xl max-h-[92vh] rounded-[20px] overflow-hidden flex flex-col bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -979,29 +1010,60 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
                 </thead>
                 <tbody>
                   <tr className="align-top">
-                    <td className="border-r border-[#111827] px-1 py-1 text-center">1</td>
+                    <td className="border-r border-[#111827] px-1 py-1 text-center font-sans">1</td>
                     <td className="border-r border-[#111827] px-1 py-1 text-center font-sans font-bold">{printDate(trip.date)}</td>
-                    <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.lrNumber || "-"}</td>
-                    <td className="border-r border-[#111827] px-1 py-1 text-center">{vehicle?.number || trip.manualVehicleNumber || "-"}</td>
-                    <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.pickup}</td>
-                    <td className="border-r border-[#111827] px-1 py-1 text-center">
+                    <td className="border-r border-[#111827] px-1 py-1 text-center font-sans">{trip.lrNumber || "-"}</td>
+                    <td className="border-r border-[#111827] px-1 py-1 text-center font-sans">{vehicle?.number || trip.manualVehicleNumber || "-"}</td>
+                    <td className="border-r border-[#111827] px-1 py-1 text-center font-sans">{trip.pickup}</td>
+                    <td className="border-r border-[#111827] px-1 py-1 text-center font-sans">
                       {trip.drop}
                       {trip.remarks && <span className="block text-[10px] mt-1">{trip.remarks}</span>}
                     </td>
-                    <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.size || "-"}</td>
-                    <td className="border-r border-[#111827] px-1 py-1 text-center">{trip.weight || "-"}</td>
-                    <td className="border-r border-[#111827] px-1 py-1 text-right align-top">{trip.freight.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                    <td className="px-1 py-1 text-right align-top font-bold">{totalAllCharges > 0 ? totalAllCharges.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}</td>
+                    <td className="border-r border-[#111827] px-1 py-1 text-center font-sans">{trip.size || "-"}</td>
+                    <td className="border-r border-[#111827] px-1 py-1 text-center font-sans">{trip.weight || "-"}</td>
+                    
+                    {/* FREIGHT COLUMN */}
+                    <td className="border-r border-[#111827] p-0 align-top">
+                      <div className="flex flex-col h-full">
+                        <div className="p-1 text-right font-bold border-b border-[#111827] flex items-center justify-end min-h-[26px]">
+                          {trip.freight.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </div>
+                        <div className="flex-1 flex flex-col pt-0.5 pb-1">
+                          {allCharges.map((c, i) => (
+                            <div 
+                              key={i} 
+                              ref={el => chargeRefs.current[i] = el}
+                              className="px-1 py-0.5 text-left text-[9px] leading-tight flex items-center"
+                            >
+                              {c[0]}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </td>
+                    
+                    {/* ALL CHARGES COLUMN */}
+                    <td className="p-0 align-top">
+                      <div className="flex flex-col h-full">
+                        <div className="p-1 text-right font-bold border-b border-[#111827] flex items-center justify-end min-h-[26px]">
+                          {totalAllCharges > 0 ? totalAllCharges.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "-"}
+                        </div>
+                        <div className="flex-1 flex flex-col pt-0.5 pb-1">
+                          {allCharges.map((c, i) => (
+                            <div 
+                              key={i} 
+                              className="px-1 py-0.5 text-right text-[9px] leading-tight flex items-center justify-end font-sans"
+                              style={{ height: chargeHeights[i] ? `${chargeHeights[i]}px` : 'auto' }}
+                            >
+                              {c[1].toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </td>
                   </tr>
-                  {allCharges.length > 0 && (
-                    <tr className="align-top border-b border-[#111827]/30">
-                      <td colSpan={10} className="px-2 py-1.5 text-left text-[9px] text-gray-800 leading-tight">
-                        <span className="font-semibold">Charges Breakdown: </span>
-                        {allCharges.map(([label, value]) => `${label} ₹${value.toLocaleString("en-IN")}`).join(" | ")}
-                      </td>
-                    </tr>
-                  )}
-                  {Array.from({ length: allCharges.length > 0 ? 5 : 6 }).map((_, rowIndex) => (
+                  
+                  {Array.from({ length: 6 }).map((_, rowIndex) => (
                     <tr key={rowIndex}>
                       {Array.from({ length: 10 }).map((__, columnIndex) => (
                         <td key={columnIndex} className={`h-6 ${columnIndex < 9 ? "border-r border-[#111827]" : ""}`}>&nbsp;</td>
@@ -1013,17 +1075,17 @@ function FreightBillModal({ trip, customer, vehicle, company, onClose }: { trip:
                   <tr className="border-t border-[#111827]">
                     <td colSpan={7} className="align-bottom px-1 py-1 text-left text-[10px] italic">{trip.remarks || ""}</td>
                     <td colSpan={2} className="border-l border-[#111827] px-2 py-1 text-right font-semibold">Amount</td>
-                    <td className="border-l border-[#111827] px-2 py-1 text-right">{amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className="border-l border-[#111827] px-2 py-1 text-right font-sans">{amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   </tr>
                   <tr>
                     <td colSpan={7}></td>
                     <td colSpan={2} className="border-l border-[#111827] px-2 py-1 text-right font-semibold">Advance</td>
-                    <td className="border-l border-[#111827] px-2 py-1 text-right">{advance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className="border-l border-[#111827] px-2 py-1 text-right font-sans">{advance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   </tr>
                   <tr className="border-b border-[#111827]">
                     <td colSpan={7}></td>
                     <td colSpan={2} className="border-l border-t border-[#111827] px-2 py-1 text-right font-semibold">Balance</td>
-                    <td className="border-l border-t border-[#111827] px-2 py-1 text-right font-bold">{balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className="border-l border-t border-[#111827] px-2 py-1 text-right font-bold font-sans">{balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
                   </tr>
                 </tfoot>
               </table>
