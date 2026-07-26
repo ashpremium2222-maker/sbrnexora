@@ -528,7 +528,13 @@ export async function seedBookingHistoryFromTrips() {
       if (trip.drop) await upsertHistoryRecord(BookingToHistory, trip.drop);
       if (trip.size) await upsertHistoryRecord(BookingSizeHistory, trip.size);
     }
+    const balanceFreights = await BalanceFreight.find({}).select("from to size").lean();
+    for (const bf of balanceFreights) {
+      if (bf.from) await upsertHistoryRecord(BookingFromHistory, bf.from);
+      if (bf.to) await upsertHistoryRecord(BookingToHistory, bf.to);
+      if (bf.size) await upsertHistoryRecord(BookingSizeHistory, bf.size);
+    }
   } catch (err) {
-    console.error("Failed to seed booking history from trips", err);
+    console.error("Failed to seed history from trips & vehicle register", err);
   }
 }

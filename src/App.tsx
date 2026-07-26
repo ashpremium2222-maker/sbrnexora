@@ -3688,10 +3688,10 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
     <VehicleSearchField value={form.vehicleNumber || ""} onChange={(v) => set("vehicleNumber", v)} vehicles={vehicles} valueKind="number" />
     <Field label="Owner Name" value={form.ownerName || ""} onChange={(v) => set("ownerName", v)} />
     <AutocompleteField label="Party Name" value={form.partyName || ""} onChange={(v) => set("partyName", v)} endpoint="/customers" extractLabel={(c) => c.company} extractValue={(c) => c.company} />
-    <AutocompleteField label="From" value={form.from || ""} onChange={(v) => set("from", v)} endpoint="/locations" extractLabel={(o) => o.name} extractValue={(o) => o.name} />
-    <AutocompleteField label="To" value={form.to || ""} onChange={(v) => set("to", v)} endpoint="/locations" extractLabel={(o) => o.name} extractValue={(o) => o.name} />
+    <AutocompleteField label="From" value={form.from || ""} onChange={(v) => set("from", v)} endpoint="/bookingFromHistory" extractLabel={(o) => o.value || o.name || ""} extractValue={(o) => o.value || o.name || ""} />
+    <AutocompleteField label="To" value={form.to || ""} onChange={(v) => set("to", v)} endpoint="/bookingToHistory" extractLabel={(o) => o.value || o.name || ""} extractValue={(o) => o.value || o.name || ""} />
     <Field label="CN No." value={form.cnNo || ""} onChange={(v) => set("cnNo", v)} />
-    <AutocompleteField label="Size" value={form.size || ""} onChange={(v) => set("size", v)} endpoint="/sizes" extractLabel={(o) => o.value} extractValue={(o) => o.value} />
+    <AutocompleteField label="Size" value={form.size || ""} onChange={(v) => set("size", v)} endpoint="/bookingSizeHistory" extractLabel={(o) => o.value || o.name || ""} extractValue={(o) => o.value || o.name || ""} />
     <AutocompleteField label="Weight" value={form.weight || ""} onChange={(v) => set("weight", v)} endpoint="/weights" extractLabel={(o) => o.value} extractValue={(o) => o.value} />
     <Field label="Freight" type="number" value={form.freight || ""} onChange={(v) => set("freight", v)} />
 
