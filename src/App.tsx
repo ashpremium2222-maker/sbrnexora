@@ -1154,7 +1154,10 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
         <div className="flex-1 overflow-auto bg-[#0B111C]/5 p-4 flex justify-center">
           <div id="challan-printable" className="bg-white w-full max-w-[720px] p-6 text-[#111827] border-2 border-[#111827] rounded-md" style={{ fontFamily: "Roboto, Arial, sans-serif", fontWeight: 400 }}>
             <p className="text-center text-[10px] font-bold tracking-wide">LORRY HIRE CHALLAN</p>
-            <h1 className="text-center text-2xl font-bold tracking-wide mt-1 text-[#F97316]">SHREE BIROBA ROADLINES</h1>
+            <div className="flex items-center justify-center gap-4 mt-1">
+              <img src="/sbr-logo-new.png" alt="Logo" className="h-16 w-auto object-contain" />
+              <h1 className="text-2xl font-bold tracking-wide text-[#F97316]" style={{ fontFamily: "'Angular-Odyssey', sans-serif", letterSpacing: "1px" }}>SHREE BIROBA ROADLINES</h1>
+            </div>
             <p className="text-center text-[10px] mt-1" style={{ fontFamily: "Roboto, Arial, sans-serif", fontWeight: 700 }}>Transport Contractor & Carrying Heavy & ODC Size Consignment Services</p>
             <p className="text-center text-xs mt-1">Shop No-03, 5th Floor, Geet Sidhi Commercial, Nr MNGL Gas Station, Big City Mart Bldg, Moshi, Pune - 412105</p>
             <p className="text-center text-xs">7350005112 / 7757004694 &nbsp; Email - shreebirobaroadlines1980@gmail.com</p>
