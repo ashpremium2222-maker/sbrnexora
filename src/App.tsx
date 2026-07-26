@@ -1322,15 +1322,17 @@ function AutocompleteField({ label, value, onChange, endpoint, extractLabel, ext
     window.addEventListener("app:dropdown-open", handleDropdownOpen);
     window.addEventListener("app:close-all-dropdowns", handleCloseAll);
     window.addEventListener("keydown", handleGlobalKeyDown);
-    document.addEventListener("mousedown", handleClickOutsideOrFocus);
-    document.addEventListener("focusin", handleClickOutsideOrFocus);
+    document.addEventListener("pointerdown", handleClickOutsideOrFocus, true);
+    document.addEventListener("mousedown", handleClickOutsideOrFocus, true);
+    document.addEventListener("focusin", handleClickOutsideOrFocus, true);
 
     return () => {
       window.removeEventListener("app:dropdown-open", handleDropdownOpen);
       window.removeEventListener("app:close-all-dropdowns", handleCloseAll);
       window.removeEventListener("keydown", handleGlobalKeyDown);
-      document.removeEventListener("mousedown", handleClickOutsideOrFocus);
-      document.removeEventListener("focusin", handleClickOutsideOrFocus);
+      document.removeEventListener("pointerdown", handleClickOutsideOrFocus, true);
+      document.removeEventListener("mousedown", handleClickOutsideOrFocus, true);
+      document.removeEventListener("focusin", handleClickOutsideOrFocus, true);
     };
   }, [fieldId]);
 
@@ -1542,15 +1544,17 @@ function VehicleSearchField({ label = "Vehicle No.", value, onChange, vehicles, 
     window.addEventListener("app:dropdown-open", handleDropdownOpen);
     window.addEventListener("app:close-all-dropdowns", handleCloseAll);
     window.addEventListener("keydown", handleGlobalKeyDown);
-    document.addEventListener("mousedown", handleClickOutsideOrFocus);
-    document.addEventListener("focusin", handleClickOutsideOrFocus);
+    document.addEventListener("pointerdown", handleClickOutsideOrFocus, true);
+    document.addEventListener("mousedown", handleClickOutsideOrFocus, true);
+    document.addEventListener("focusin", handleClickOutsideOrFocus, true);
 
     return () => {
       window.removeEventListener("app:dropdown-open", handleDropdownOpen);
       window.removeEventListener("app:close-all-dropdowns", handleCloseAll);
       window.removeEventListener("keydown", handleGlobalKeyDown);
-      document.removeEventListener("mousedown", handleClickOutsideOrFocus);
-      document.removeEventListener("focusin", handleClickOutsideOrFocus);
+      document.removeEventListener("pointerdown", handleClickOutsideOrFocus, true);
+      document.removeEventListener("mousedown", handleClickOutsideOrFocus, true);
+      document.removeEventListener("focusin", handleClickOutsideOrFocus, true);
     };
   }, [fieldId]);
 
