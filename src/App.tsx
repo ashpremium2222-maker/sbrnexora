@@ -1265,7 +1265,9 @@ function AutocompleteField({ label, value, onChange, endpoint, extractLabel, ext
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState(value);
   const [debouncedQuery, setDebouncedQuery] = useState(value);
 
@@ -1278,7 +1280,10 @@ function AutocompleteField({ label, value, onChange, endpoint, extractLabel, ext
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) setOpen(false);
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setHighlightIndex(-1);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -1290,9 +1295,15 @@ function AutocompleteField({ label, value, onChange, endpoint, extractLabel, ext
     const fetchOptions = async () => {
       setLoading(true);
       try {
-        const query = debouncedQuery ? `?q=${encodeURIComponent(debouncedQuery)}` : "";
-        const data = await apiFetch(`${endpoint}${query}`, currentAuthToken);
-        if (isActive) setOptions(data.items || []);
+        const queryParams = new URLSearchParams();
+        if (debouncedQuery) queryParams.set("q", debouncedQuery);
+        queryParams.set("limit", "100");
+        const queryStr = queryParams.toString() ? `?${queryParams.toString()}` : "";
+        const data = await apiFetch(`${endpoint}${queryStr}`, currentAuthToken);
+        if (isActive) {
+          setOptions(data.items || []);
+          setHighlightIndex(-1);
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -1302,6 +1313,75 @@ function AutocompleteField({ label, value, onChange, endpoint, extractLabel, ext
     fetchOptions();
     return () => { isActive = false; };
   }, [debouncedQuery, open, endpoint]);
+
+  const selectOption = async (opt: any) => {
+    const finalVal = extractValue ? extractValue(opt) : extractLabel(opt);
+    setInputValue(finalVal);
+    onChange(finalVal);
+    setOpen(false);
+    setHighlightIndex(-1);
+
+    const optId = opt._id || opt.id;
+    try {
+      await apiFetch(`${endpoint}/use`, currentAuthToken, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: optId, value: finalVal }),
+      });
+    } catch (e) {
+      console.error("Failed to record history usage", e);
+    }
+  };
+
+  const deleteOption = async (opt: any, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const optVal = extractLabel(opt);
+    if (!window.confirm(`Are you sure you want to delete "${optVal}" from saved history?`)) return;
+    const optId = opt._id || opt.id;
+    try {
+      if (optId) {
+        await apiFetch(`${endpoint}/${optId}`, currentAuthToken, { method: "DELETE" });
+      }
+      setOptions((prev) => prev.filter((item) => (item._id || item.id) !== optId));
+    } catch (err) {
+      console.error("Failed to delete history item", err);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        setOpen(true);
+      }
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIndex((prev) => (options.length ? (prev + 1) % options.length : -1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIndex((prev) => (options.length ? (prev - 1 + options.length) % options.length : -1));
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      if (highlightIndex >= 0 && options[highlightIndex]) {
+        e.preventDefault();
+        selectOption(options[highlightIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false);
+      setHighlightIndex(-1);
+    }
+  };
+
+  useEffect(() => {
+    if (highlightIndex >= 0 && listRef.current) {
+      const el = listRef.current.children[highlightIndex] as HTMLElement;
+      if (el) {
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    }
+  }, [highlightIndex]);
 
   return (
     <div className="relative mb-4" ref={wrapperRef}>
@@ -1315,29 +1395,58 @@ function AutocompleteField({ label, value, onChange, endpoint, extractLabel, ext
            setOpen(true); 
         }} 
         onFocus={() => setOpen(true)}
+        onKeyDown={handleKeyDown}
         className="mt-1.5 w-full rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1a1d2e]/10" 
-        placeholder="Type to search or add new..."
+        placeholder="Type to search or select history..."
       />
       {open && (options.length > 0 || loading) && (
-        <div className="absolute z-50 mt-1 w-full rounded-xl border border-white/60 bg-white/95 p-1 shadow-lg backdrop-blur-md max-h-48 overflow-y-auto">
+        <div 
+          ref={listRef}
+          className="absolute z-50 mt-1 w-full rounded-2xl border border-white/70 bg-white/95 p-1.5 shadow-xl backdrop-blur-md max-h-56 overflow-y-auto"
+        >
           {loading ? (
-            <div className="px-3 py-2 text-xs text-[#1a1d2e]/60">Loading...</div>
+            <div className="px-3 py-2 text-xs text-[#1a1d2e]/60">Loading suggestions...</div>
           ) : (
-            options.map((opt, i) => (
-              <div 
-                key={i} 
-                className="cursor-pointer rounded-lg px-3 py-2 text-sm text-[#1a1d2e] hover:bg-black/5"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  const finalVal = extractValue ? extractValue(opt) : extractLabel(opt);
-                  setInputValue(finalVal);
-                  onChange(finalVal);
-                  setOpen(false);
-                }}
-              >
-                {extractLabel(opt)}
-              </div>
-            ))
+            options.map((opt, i) => {
+              const isHighlighted = i === highlightIndex;
+              const labelText = extractLabel(opt);
+              return (
+                <div 
+                  key={opt._id || opt.id || i} 
+                  className={`group flex items-center justify-between cursor-pointer rounded-xl px-3 py-2 text-sm transition-all ${
+                    isHighlighted ? "bg-[#12151C] text-white" : "text-[#1a1d2e] hover:bg-black/5"
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    selectOption(opt);
+                  }}
+                  onMouseEnter={() => setHighlightIndex(i)}
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1 pr-2">
+                    <span className="truncate">{labelText}</span>
+                    {typeof opt.usageCount === "number" && opt.usageCount > 1 && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-mono flex-shrink-0 ${
+                        isHighlighted ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                      }`}>
+                        {opt.usageCount}x
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    title="Delete from history"
+                    onMouseDown={(e) => deleteOption(opt, e)}
+                    className={`p-1 rounded-lg transition-colors flex-shrink-0 ${
+                      isHighlighted
+                        ? "text-white/70 hover:text-red-300 hover:bg-white/20"
+                        : "text-[#9CA3AF] hover:text-red-600 hover:bg-red-50"
+                    }`}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              );
+            })
           )}
         </div>
       )}
@@ -3315,9 +3424,9 @@ function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record
     <Field label="LR Number" value={form.lrNumber || ""} onChange={(v) => set("lrNumber", v)} />
     <VehicleSearchField value={form.vehicleId || form.manualVehicleNumber || ""} onChange={(v) => { set("vehicleId", v); if (v) set("manualVehicleNumber", ""); }} onManualChange={(v) => { set("manualVehicleNumber", v); set("vehicleId", ""); }} vehicles={availableVehicles} valueKind="id" />
     <AutocompleteField label="Party Name" value={form.partyName || (customers.find(c => c.id === form.customerId)?.company) || ""} onChange={(v) => { set("partyName", v); set("customerId", ""); }} endpoint="/customers" extractLabel={(c) => c.company} />
-    <AutocompleteField label="Size" value={form.size || ""} onChange={(v) => set("size", v)} endpoint="/sizes" extractLabel={(o) => o.value} extractValue={(o) => o.value} />
-    <AutocompleteField label="From" value={form.pickup || ""} onChange={(v) => set("pickup", v)} endpoint="/locations" extractLabel={(o) => o.name} extractValue={(o) => o.name} />
-    <AutocompleteField label="To" value={form.drop || ""} onChange={(v) => set("drop", v)} endpoint="/locations" extractLabel={(o) => o.name} extractValue={(o) => o.name} />
+    <AutocompleteField label="Size" value={form.size || ""} onChange={(v) => set("size", v)} endpoint="/bookingSizeHistory" extractLabel={(o) => o.value || o.name || ""} extractValue={(o) => o.value || o.name || ""} />
+    <AutocompleteField label="From" value={form.pickup || ""} onChange={(v) => set("pickup", v)} endpoint="/bookingFromHistory" extractLabel={(o) => o.value || o.name || ""} extractValue={(o) => o.value || o.name || ""} />
+    <AutocompleteField label="To" value={form.drop || ""} onChange={(v) => set("drop", v)} endpoint="/bookingToHistory" extractLabel={(o) => o.value || o.name || ""} extractValue={(o) => o.value || o.name || ""} />
     <AutocompleteField label="Weight" value={form.weight || ""} onChange={(v) => set("weight", v)} endpoint="/weights" extractLabel={(o) => o.value} extractValue={(o) => o.value} />
     <Field label="Freight" type="number" value={form.freight || ""} onChange={(v) => set("freight", v)} />
     <FormSection title="Advance Details" />

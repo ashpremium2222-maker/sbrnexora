@@ -33,11 +33,11 @@ function cleanPayload(payload = {}) {
   return result;
 }
 
-export function crudController(Model, { populate = "", searchFields = [] } = {}) {
+export function crudController(Model, { populate = "", searchFields = [], defaultSort = "-createdAt" } = {}) {
   return {
     async list(req, res, next) {
       try {
-        const { q, sort = "-createdAt", page = 1, limit = 25 } = req.query;
+        const { q, sort = defaultSort, page = 1, limit = 25 } = req.query;
         let query = {};
         if (q) {
           if (searchFields.length > 0) {

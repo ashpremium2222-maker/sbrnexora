@@ -431,6 +431,35 @@ export const Weight = mongoose.model("Weight", new mongoose.Schema({
   lastUsedAt: { type: Date, default: Date.now },
 }, { timestamps: true }).index({ value: "text" }));
 
+const historySchema = new mongoose.Schema({
+  value: { type: String, required: true, trim: true },
+  usageCount: { type: Number, default: 1 },
+  lastUsedAt: { type: Date, default: Date.now },
+}, {
+  timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" }
+});
+
+historySchema.index({ value: 1 });
+historySchema.index({ usageCount: -1, value: 1 });
+
+export const BookingFromHistory = mongoose.model("BookingFromHistory", historySchema, "booking_from_history");
+export const BookingToHistory = mongoose.model("BookingToHistory", historySchema, "booking_to_history");
+export const BookingSizeHistory = mongoose.model("BookingSizeHistory", historySchema, "booking_size_history");
+
+export async function upsertHistoryRecord(Model, val) {
+  if (!val || typeof val !== "string" || !val.trim()) return;
+  const cleanVal = val.trim();
+  const escaped = cleanVal.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const existing = await Model.findOne({ value: new RegExp(`^${escaped}$`, "i") });
+  if (existing) {
+    existing.usageCount = (existing.usageCount || 0) + 1;
+    existing.lastUsedAt = new Date();
+    await existing.save();
+  } else {
+    await Model.create({ value: cleanVal, usageCount: 1, lastUsedAt: new Date() });
+  }
+}
+
 async function handleMasterDataUpsert(doc) {
   if (doc.partyName && doc.partyName.trim()) {
     await mongoose.model("Customer").findOneAndUpdate(
@@ -455,13 +484,30 @@ async function handleMasterDataUpsert(doc) {
       ).catch(console.error);
     }
   }
+
+  if (doc.pickup && doc.pickup.trim()) {
+    await upsertHistoryRecord(BookingFromHistory, doc.pickup).catch(console.error);
+  }
+  if (doc.drop && doc.drop.trim()) {
+    await upsertHistoryRecord(BookingToHistory, doc.drop).catch(console.error);
+  }
+  if (doc.from && doc.from.trim()) {
+    await upsertHistoryRecord(BookingFromHistory, doc.from).catch(console.error);
+  }
+  if (doc.to && doc.to.trim()) {
+    await upsertHistoryRecord(BookingToHistory, doc.to).catch(console.error);
+  }
+
   if (doc.size && doc.size.trim()) {
     await Size.findOneAndUpdate(
       { value: new RegExp(`^${doc.size.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") },
       { $inc: { usageCount: 1 }, $set: { value: doc.size.trim(), lastUsedAt: new Date() } },
       { upsert: true }
     ).catch(console.error);
+
+    await upsertHistoryRecord(BookingSizeHistory, doc.size).catch(console.error);
   }
+
   if (doc.weight && doc.weight.trim()) {
     await Weight.findOneAndUpdate(
       { value: new RegExp(`^${doc.weight.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, "i") },
@@ -473,3 +519,16 @@ async function handleMasterDataUpsert(doc) {
 
 tripSchema.post("save", handleMasterDataUpsert);
 balanceFreightSchema.post("save", handleMasterDataUpsert);
+
+export async function seedBookingHistoryFromTrips() {
+  try {
+    const trips = await Trip.find({}).select("pickup drop size").lean();
+    for (const trip of trips) {
+      if (trip.pickup) await upsertHistoryRecord(BookingFromHistory, trip.pickup);
+      if (trip.drop) await upsertHistoryRecord(BookingToHistory, trip.drop);
+      if (trip.size) await upsertHistoryRecord(BookingSizeHistory, trip.size);
+    }
+  } catch (err) {
+    console.error("Failed to seed booking history from trips", err);
+  }
+}

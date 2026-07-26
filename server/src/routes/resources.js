@@ -1,9 +1,28 @@
 import express from "express";
-import { Attendance, AuditLog, BalanceFreight, CompanyExpense, CompanyProfile, Customer, DocumentRecord, Driver, EmiReminder, Expense, Invoice, Maintenance, Notification, Payment, Payroll, Trip, Vehicle, Location, Size, Weight } from "../models/index.js";
+import { Attendance, AuditLog, BalanceFreight, CompanyExpense, CompanyProfile, Customer, DocumentRecord, Driver, EmiReminder, Expense, Invoice, Maintenance, Notification, Payment, Payroll, Trip, Vehicle, Location, Size, Weight, BookingFromHistory, BookingToHistory, BookingSizeHistory, upsertHistoryRecord } from "../models/index.js";
 import { crudController } from "../controllers/crudController.js";
 import { authorize } from "../middleware/auth.js";
 
 const router = express.Router();
+
+async function incrementHistoryUse(Model, req, res, next) {
+  try {
+    const { id, value } = req.body;
+    let item;
+    if (id) {
+      item = await Model.findByIdAndUpdate(id, { $inc: { usageCount: 1 }, $set: { lastUsedAt: new Date() } }, { new: true });
+    } else if (value) {
+      await upsertHistoryRecord(Model, value);
+      const escaped = value.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      item = await Model.findOne({ value: new RegExp(`^${escaped}$`, "i") });
+    }
+    res.json(item || { ok: true });
+  } catch (err) { next(err); }
+}
+
+router.post("/bookingFromHistory/use", authorize("admin", "manager"), (req, res, next) => incrementHistoryUse(BookingFromHistory, req, res, next));
+router.post("/bookingToHistory/use", authorize("admin", "manager"), (req, res, next) => incrementHistoryUse(BookingToHistory, req, res, next));
+router.post("/bookingSizeHistory/use", authorize("admin", "manager"), (req, res, next) => incrementHistoryUse(BookingSizeHistory, req, res, next));
 
 // One shared company profile. It is intentionally separate from generic CRUD
 // resources so every admin edits the same permanent business identity.
@@ -79,6 +98,9 @@ const resources = {
   balanceFreights: [BalanceFreight, {}],
   attendance: [Attendance, { populate: "driver" }],
   payroll: [Payroll, { populate: "driver" }],
+  bookingFromHistory: [BookingFromHistory, { searchFields: ["value"], defaultSort: "-usageCount value" }],
+  bookingToHistory: [BookingToHistory, { searchFields: ["value"], defaultSort: "-usageCount value" }],
+  bookingSizeHistory: [BookingSizeHistory, { searchFields: ["value"], defaultSort: "-usageCount value" }],
   auditLogs: [AuditLog, { populate: "actor" }],
 };
 

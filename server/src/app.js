@@ -35,9 +35,12 @@ app.use("/api", authenticate, resourceRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
+import { seedBookingHistoryFromTrips } from "./models/index.js";
+
 export async function start() {
   await mongoose.connect(mongoUri);
   console.log("MongoDB connected");
+  await seedBookingHistoryFromTrips().catch(console.error);
   app.listen(port, () => console.log(`API listening on http://localhost:${port}`));
 }
 
