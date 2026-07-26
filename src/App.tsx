@@ -810,7 +810,19 @@ function Toolbar({ title, subtitle, search, setSearch, action, filters }: { titl
   );
 }
 
+function notifyDropdownOpen(id: string) {
+  window.dispatchEvent(new CustomEvent("app:dropdown-open", { detail: { id } }));
+}
+
+function closeAllDropdowns() {
+  window.dispatchEvent(new CustomEvent("app:close-all-dropdowns"));
+}
+
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    closeAllDropdowns();
+  }, []);
+
   return (
     <div className="fixed inset-0 bg-[#1a1d2e]/15 backdrop-blur-[2px] z-50 flex justify-end" onMouseDown={onClose}>
       <div className="h-full w-[440px] max-w-full rounded-l-[28px] border-l border-white/60 shadow-2xl overflow-y-auto" style={{ ...glass, background: "var(--card)" }} onMouseDown={(e) => e.stopPropagation()}>
@@ -1263,6 +1275,7 @@ function SelectField({ label, value, onChange, options, allowManual = false, man
 
 function AutocompleteField({ label, value, onChange, endpoint, extractLabel, extractValue }: { label: string; value: string; onChange: (v: string) => void; endpoint: string; extractLabel: (item: any) => string; extractValue?: (item: any) => string }) {
   const [open, setOpen] = useState(false);
+  const fieldId = useRef("autocomplete-" + Math.random().toString(36).substring(2, 9)).current;
   const [options, setOptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
@@ -1279,15 +1292,52 @@ function AutocompleteField({ label, value, onChange, endpoint, extractLabel, ext
   }, [inputValue]);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleDropdownOpen = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string }>;
+      if (customEvent.detail?.id !== fieldId) {
+        setOpen(false);
+        setHighlightIndex(-1);
+      }
+    };
+
+    const handleCloseAll = () => {
+      setOpen(false);
+      setHighlightIndex(-1);
+    };
+
+    const handleClickOutsideOrFocus = (event: Event) => {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
         setOpen(false);
         setHighlightIndex(-1);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        setHighlightIndex(-1);
+      }
+    };
+
+    window.addEventListener("app:dropdown-open", handleDropdownOpen);
+    window.addEventListener("app:close-all-dropdowns", handleCloseAll);
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    document.addEventListener("mousedown", handleClickOutsideOrFocus);
+    document.addEventListener("focusin", handleClickOutsideOrFocus);
+
+    return () => {
+      window.removeEventListener("app:dropdown-open", handleDropdownOpen);
+      window.removeEventListener("app:close-all-dropdowns", handleCloseAll);
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+      document.removeEventListener("mousedown", handleClickOutsideOrFocus);
+      document.removeEventListener("focusin", handleClickOutsideOrFocus);
+    };
+  }, [fieldId]);
+
+  const openDropdown = () => {
+    notifyDropdownOpen(fieldId);
+    setOpen(true);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -1352,7 +1402,7 @@ function AutocompleteField({ label, value, onChange, endpoint, extractLabel, ext
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!open) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        setOpen(true);
+        openDropdown();
       }
       return;
     }
@@ -1392,11 +1442,12 @@ function AutocompleteField({ label, value, onChange, endpoint, extractLabel, ext
         onChange={(e) => { 
            setInputValue(e.target.value);
            onChange(e.target.value); 
-           setOpen(true); 
+           openDropdown(); 
         }} 
-        onFocus={() => setOpen(true)}
+        onFocus={openDropdown}
+        onClick={openDropdown}
         onKeyDown={handleKeyDown}
-        className="mt-1.5 w-full rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1a1d2e]/10" 
+        className="mt-1.5 w-full rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1a1d2e]/10 transition-all duration-150" 
         placeholder="Type to search or select history..."
       />
       {open && (options.length > 0 || loading) && (
@@ -1453,23 +1504,125 @@ function AutocompleteField({ label, value, onChange, endpoint, extractLabel, ext
     </div>
   );
 }
+
 function VehicleSearchField({ label = "Vehicle No.", value, onChange, vehicles, valueKind, onManualChange }: { label?: string; value: string; onChange: (value: string) => void; vehicles: Vehicle[]; valueKind: "id" | "number"; onManualChange?: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const fieldId = useRef("vehicle-" + Math.random().toString(36).substring(2, 9)).current;
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const selected = vehicles.find((vehicle) => (valueKind === "id" ? vehicle.id : vehicle.number) === value);
   const [query, setQuery] = useState(selected?.number ?? value ?? "");
-  // A rented/unregistered vehicle is a valid final selection too. Keep the
-  // suggestion list closed once the user has chosen to enter it manually.
   const [manualSelected, setManualSelected] = useState(Boolean(value) && !selected);
   const normalized = query.replace(/[^a-z0-9]/gi, "").toLowerCase();
   const matches = vehicles.filter((vehicle) => vehicle.number.replace(/[^a-z0-9]/gi, "").toLowerCase().includes(normalized)).slice(0, 8);
-  const choose = (vehicle: Vehicle) => { setQuery(vehicle.number); setManualSelected(false); onChange(valueKind === "id" ? vehicle.id : vehicle.number); onManualChange?.(""); };
-  const chooseManual = () => { const manual = query.trim().toUpperCase(); if (!manual) return; setQuery(manual); setManualSelected(true); if (valueKind === "number") onChange(manual); else onManualChange?.(manual); };
-  return <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]">
-    <span>{label}</span>
-    <div className="relative mt-1.5">
-      <input value={query} onChange={(event) => { const next = event.target.value.toUpperCase(); setQuery(next); const exact = vehicles.find((vehicle) => vehicle.number.toLowerCase() === next.toLowerCase()); const hasMatches = vehicles.some((vehicle) => vehicle.number.replace(/[^a-z0-9]/gi, "").toLowerCase().includes(next.replace(/[^a-z0-9]/gi, "").toLowerCase())); if (exact) { setManualSelected(false); onChange(valueKind === "id" ? exact.id : exact.number); onManualChange?.(""); } else if (next && !hasMatches) { setManualSelected(true); if (valueKind === "number") onChange(next); else onManualChange?.(next); } else { setManualSelected(false); onChange(""); onManualChange?.(""); } }} placeholder="Type vehicle number, e.g. MH12 or 12" className="w-full rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1a1d2e]/10" />
-      {query && !selected && !manualSelected && <div className="absolute z-30 mt-1 w-full max-h-48 overflow-auto rounded-2xl border border-white/70 bg-white shadow-xl p-1">{matches.map((vehicle) => <button key={vehicle.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(vehicle)} className="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-100"><b>{vehicle.number}</b><span className="ml-2 text-xs text-[#8A94A6]">{vehicle.model}</span></button>)}<button type="button" onMouseDown={(event) => event.preventDefault()} onClick={chooseManual} className="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold text-blue-700 hover:bg-blue-50">Enter “{query}” manually <span className="ml-1 text-xs font-normal text-[#8A94A6]">(rented / unregistered)</span></button></div>}
-    </div>
-  </label>;
+
+  useEffect(() => {
+    const handleDropdownOpen = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string }>;
+      if (customEvent.detail?.id !== fieldId) {
+        setOpen(false);
+      }
+    };
+
+    const handleCloseAll = () => {
+      setOpen(false);
+    };
+
+    const handleClickOutsideOrFocus = (event: Event) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+      }
+    };
+
+    window.addEventListener("app:dropdown-open", handleDropdownOpen);
+    window.addEventListener("app:close-all-dropdowns", handleCloseAll);
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    document.addEventListener("mousedown", handleClickOutsideOrFocus);
+    document.addEventListener("focusin", handleClickOutsideOrFocus);
+
+    return () => {
+      window.removeEventListener("app:dropdown-open", handleDropdownOpen);
+      window.removeEventListener("app:close-all-dropdowns", handleCloseAll);
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+      document.removeEventListener("mousedown", handleClickOutsideOrFocus);
+      document.removeEventListener("focusin", handleClickOutsideOrFocus);
+    };
+  }, [fieldId]);
+
+  const openDropdown = () => {
+    notifyDropdownOpen(fieldId);
+    setOpen(true);
+  };
+
+  const choose = (vehicle: Vehicle) => {
+    setQuery(vehicle.number);
+    setManualSelected(false);
+    onChange(valueKind === "id" ? vehicle.id : vehicle.number);
+    onManualChange?.("");
+    setOpen(false);
+  };
+
+  const chooseManual = () => {
+    const manual = query.trim().toUpperCase();
+    if (!manual) return;
+    setQuery(manual);
+    setManualSelected(true);
+    if (valueKind === "number") onChange(manual);
+    else onManualChange?.(manual);
+    setOpen(false);
+  };
+
+  return (
+    <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]" ref={wrapperRef}>
+      <span>{label}</span>
+      <div className="relative mt-1.5">
+        <input 
+          value={query} 
+          onFocus={openDropdown}
+          onClick={openDropdown}
+          onChange={(event) => { 
+            openDropdown();
+            const next = event.target.value.toUpperCase(); 
+            setQuery(next); 
+            const exact = vehicles.find((vehicle) => vehicle.number.toLowerCase() === next.toLowerCase()); 
+            const hasMatches = vehicles.some((vehicle) => vehicle.number.replace(/[^a-z0-9]/gi, "").toLowerCase().includes(next.replace(/[^a-z0-9]/gi, "").toLowerCase())); 
+            if (exact) { 
+              setManualSelected(false); 
+              onChange(valueKind === "id" ? exact.id : exact.number); 
+              onManualChange?.(""); 
+            } else if (next && !hasMatches) { 
+              setManualSelected(true); 
+              if (valueKind === "number") onChange(next); 
+              else onManualChange?.(next); 
+            } else { 
+              setManualSelected(false); 
+              onChange(""); 
+              onManualChange?.(""); 
+            } 
+          }} 
+          placeholder="Type vehicle number, e.g. MH12 or 12" 
+          className="w-full rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-[#1a1d2e]/10 transition-all duration-150" 
+        />
+        {open && query && !selected && !manualSelected && (
+          <div className="absolute z-30 mt-1 w-full max-h-48 overflow-auto rounded-2xl border border-white/70 bg-white shadow-xl p-1">
+            {matches.map((vehicle) => (
+              <button key={vehicle.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(vehicle)} className="w-full text-left px-3 py-2 rounded-xl text-sm hover:bg-slate-100">
+                <b>{vehicle.number}</b><span className="ml-2 text-xs text-[#8A94A6]">{vehicle.model}</span>
+              </button>
+            ))}
+            <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={chooseManual} className="w-full text-left px-3 py-2 rounded-xl text-sm font-semibold text-blue-700 hover:bg-blue-50">
+              Enter “{query}” manually <span className="ml-1 text-xs font-normal text-[#8A94A6]">(rented / unregistered)</span>
+            </button>
+          </div>
+        )}
+      </div>
+    </label>
+  );
 }
 type UploadedFile = { fileName: string; dataUrl: string };
 async function uploadFilesToServer(files: File[], type: string): Promise<UploadedFile[]> {
