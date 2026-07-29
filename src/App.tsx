@@ -1224,7 +1224,9 @@ function ChallanModal({ record, vehicle, company, onClose }: { record: BalanceFr
               <p><span className="font-semibold">Cash / Bank :</span> {record.paymentMode || "-"}</p>
               <p><span className="font-semibold">Discount :</span> {(record.discount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
               <p><span className="font-semibold">Chq No. :</span> {record.chequeNeftNumber || "-"}</p>
+              <p><span className="font-semibold">Paid Date :</span> {record.paymentDate || "-"}</p>
             </div>
+            <p className="text-xs border-t border-[#111827] mt-2 pt-2"><span className="font-semibold">Balance Amount (In Words) :</span> {amountInWords(balance).replace("And Zero Paise Only", "Rupees Only")}</p>
             <p className="text-xs border-t border-[#111827] mt-2 pt-2"><span className="font-semibold">Remark :</span> {record.remarks || ""}</p>
 
             <div className="grid grid-cols-4 text-[10px] text-center mt-10 pt-2 border-t border-[#111827] gap-2">
