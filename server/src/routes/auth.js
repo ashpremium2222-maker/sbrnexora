@@ -26,7 +26,7 @@ router.post("/register", authenticate, authorize("admin"), async (req, res) => {
     name,
     email,
     phone,
-    passwordHash: await bcrypt.hash(password, 10),
+    passwordHash: await bcrypt.hash(password, 8),
     role: role || "driver",
   });
   res.status(201).json({ id: user._id, name: user.name, email: user.email, role: user.role });

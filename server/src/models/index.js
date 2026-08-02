@@ -30,8 +30,8 @@ const moneyBreakdownSchema = new mongoose.Schema({
 
 export const User = mongoose.model("User", new mongoose.Schema({
   name: { type: String, required: true },
-  email: { type: String, lowercase: true, trim: true },
-  phone: String,
+  email: { type: String, lowercase: true, trim: true, index: true, sparse: true },
+  phone: { type: String, index: true, sparse: true },
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ["admin", "manager", "driver"], default: "admin" },
   driver: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },
