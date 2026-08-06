@@ -37,11 +37,30 @@ app.use(errorHandler);
 
 import { seedBookingHistoryFromTrips } from "./models/index.js";
 
+// Keep Atlas free-tier cluster alive by pinging every 4 minutes.
+// Atlas M0 auto-pauses after ~60 minutes of no traffic; this prevents that.
+function startKeepAlivePing() {
+  setInterval(async () => {
+    try {
+      await mongoose.connection.db.command({ ping: 1 });
+    } catch {
+      // Silently ignore — server will reconnect on next real request
+    }
+  }, 4 * 60 * 1000); // every 4 minutes
+}
+
 export async function start() {
   await mongoose.connect(mongoUri);
   console.log("MongoDB connected");
-  await seedBookingHistoryFromTrips().catch(console.error);
+
+  // Start listening immediately — don't wait for seed to finish
   app.listen(port, () => console.log(`API listening on http://localhost:${port}`));
+
+  // Run seed in background so it never delays startup or login
+  seedBookingHistoryFromTrips().catch(console.error);
+
+  // Keep Atlas connection warm to avoid cold-start delays on login
+  startKeepAlivePing();
 }
 
 if (process.argv[1]?.endsWith("app.js")) {
