@@ -838,23 +838,23 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
 type ViewableDoc = { fileName: string; dataUrl?: string; title?: string };
 function DocumentViewerModal({ doc, onClose }: { doc: ViewableDoc; onClose: () => void }) {
   const ext = doc.fileName.split(".").pop()?.toLowerCase() || "";
-  const isImage = doc.dataUrl?.startsWith("data:image") || ["jpg", "jpeg", "png", "webp", "gif"].includes(ext);
-  const isPdf = doc.dataUrl?.startsWith("data:application/pdf") || ext === "pdf";
+  const isImage = doc.dataUrl?.startsWith("data:image") || ["jpg", "jpeg", "png", "webp", "gif"].some(e => ext === e || doc.dataUrl?.toLowerCase().includes(`.${e}?`) || doc.dataUrl?.toLowerCase().endsWith(`.${e}`));
+  const isPdf = doc.dataUrl?.startsWith("data:application/pdf") || ext === "pdf" || doc.dataUrl?.toLowerCase().includes(".pdf?") || doc.dataUrl?.toLowerCase().endsWith(".pdf");
   return (
     <div className="fixed inset-0 bg-[#1a1d2e]/45 backdrop-blur-sm z-[80] flex items-center justify-center p-4" onMouseDown={onClose}>
       <div className="w-full max-w-2xl max-h-[88vh] rounded-[24px] overflow-hidden flex flex-col" style={{ ...glass, background: "var(--card)" }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/50">
           <div className="min-w-0"><p className="text-sm font-bold truncate">{doc.title || doc.fileName}</p><p className="text-xs text-[#9CA3AF] truncate">{doc.fileName}</p></div>
           <div className="flex items-center gap-2 shrink-0">
-            {doc.dataUrl && <a href={doc.dataUrl} download={doc.fileName} className="w-9 h-9 rounded-xl flex items-center justify-center" title="Download" style={glassSubtle}><Download size={15} /></a>}
+            {doc.dataUrl && <a href={doc.dataUrl} target="_blank" rel="noreferrer" download={doc.fileName} className="w-9 h-9 rounded-xl flex items-center justify-center" title="Download" style={glassSubtle}><Download size={15} /></a>}
             <button onClick={onClose} className="w-9 h-9 rounded-xl flex items-center justify-center bg-white/60"><X size={16} /></button>
           </div>
         </div>
         <div className="flex-1 overflow-auto bg-[#0B111C]/5 p-4 flex items-center justify-center">
           {!doc.dataUrl && <EmptyState label="No preview available - this document was added before file upload was enabled. Re-upload it to view here." />}
-          {doc.dataUrl && isImage && <img src={doc.dataUrl} alt={doc.fileName} className="max-h-[70vh] max-w-full rounded-xl shadow-lg object-contain" />}
-          {doc.dataUrl && isPdf && <iframe title={doc.fileName} src={doc.dataUrl} className="w-full h-[70vh] rounded-xl bg-white" />}
-          {doc.dataUrl && !isImage && !isPdf && <div className="text-center"><FileText size={32} className="mx-auto mb-3 text-[#9CA3AF]" /><p className="text-sm font-semibold mb-2">Preview not supported for this file type</p><a href={doc.dataUrl} download={doc.fileName} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Download size={14} />Download {doc.fileName}</a></div>}
+          {doc.dataUrl && isImage && <img src={doc.dataUrl?.startsWith("/") ? API_BASE.replace("/api", "") + doc.dataUrl : doc.dataUrl} alt={doc.fileName} className="max-h-[70vh] max-w-full rounded-xl shadow-lg object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.insertAdjacentHTML('afterend', '<div class="text-center text-red-500 text-sm p-4">Image failed to load.<br/><span class="text-xs opacity-70 break-all">' + (doc.dataUrl?.startsWith("/") ? API_BASE.replace("/api", "") + doc.dataUrl : doc.dataUrl) + '</span></div>'); }} />}
+          {doc.dataUrl && isPdf && <iframe title={doc.fileName} src={doc.dataUrl?.startsWith("/") ? API_BASE.replace("/api", "") + doc.dataUrl : doc.dataUrl} className="w-full h-[70vh] rounded-xl bg-white" />}
+          {doc.dataUrl && !isImage && !isPdf && <div className="text-center"><FileText size={32} className="mx-auto mb-3 text-[#9CA3AF]" /><p className="text-sm font-semibold mb-2">Preview not supported for this file type</p><a href={doc.dataUrl?.startsWith("/") ? API_BASE.replace("/api", "") + doc.dataUrl : doc.dataUrl} target="_blank" rel="noreferrer" download={doc.fileName} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Download size={14} />Download {doc.fileName}</a></div>}
         </div>
       </div>
     </div>
@@ -1243,7 +1243,7 @@ function DocRow({ icon, title, subtitle, doc, onView }: { icon: React.ReactNode;
   return <Row>
     {icon}
     <div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate">{title}</p>{subtitle && <p className="text-xs text-[#9CA3AF] truncate">{subtitle}</p>}</div>
-    {doc && onView && <button onClick={() => onView(doc)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-white/70 ring-1 ring-white/70 hover:bg-white"><Eye size={12} />View</button>}
+    {doc && onView && <button onPointerDown={(e) => { e.stopPropagation(); e.preventDefault(); onView(doc); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-white/70 ring-1 ring-white/70 hover:bg-white"><Eye size={12} />View</button>}
   </Row>;
 }
 
@@ -1684,49 +1684,49 @@ export default function App() {
 
   useEffect(() => {
     if (!authToken) return;
-    apiFetch("/vehicles?limit=200", authToken)
+    apiFetch("/vehicles?limit=5000", authToken)
       .then((data) => {
         setVehicles((data.items || []).map(mapVehicleFromApi));
         setVehiclesLoaded(true);
       })
       .catch((err) => setVehiclesError(err instanceof Error ? err.message : "Failed to load vehicles"));
-    apiFetch("/drivers?limit=200", authToken)
+    apiFetch("/drivers?limit=5000", authToken)
       .then((data) => setDrivers((data.items || []).map(mapDriverFromApi)))
       .catch((err) => notify("Could not load drivers", err instanceof Error ? err.message : "Failed to load drivers", "alert"));
-    apiFetch("/customers?limit=200", authToken)
+    apiFetch("/customers?limit=5000", authToken)
       .then((data) => setCustomers((data.items || []).map(mapCustomerFromApi)))
       .catch((err) => notify("Could not load customers", err instanceof Error ? err.message : "Failed to load customers", "alert"));
-    apiFetch("/trips?limit=200", authToken)
+    apiFetch("/trips?limit=5000", authToken)
       .then((data) => setTrips((data.items || []).map(mapTripFromApi)))
       .catch((err) => notify("Could not load bookings", err instanceof Error ? err.message : "Failed to load bookings", "alert"));
-    apiFetch("/expenses?limit=200", authToken)
+    apiFetch("/expenses?limit=5000", authToken)
       .then((data) => setExpenses((data.items || []).map(mapExpenseFromApi)))
       .catch((err) => notify("Could not load expenses", err instanceof Error ? err.message : "Failed to load expenses", "alert"));
-    apiFetch("/companyExpenses?limit=200", authToken)
+    apiFetch("/companyExpenses?limit=5000", authToken)
       .then((data) => setCompanyExpenses((data.items || []).map(mapCompanyExpenseFromApi)))
       .catch((err) => notify("Could not load company expenses", err instanceof Error ? err.message : "Failed to load company expenses", "alert"));
-    apiFetch("/emiReminders?limit=200", authToken)
+    apiFetch("/emiReminders?limit=5000", authToken)
       .then((data) => setEmiReminders((data.items || []).map(mapEmiReminderFromApi)))
       .catch((err) => notify("Could not load EMI reminders", err instanceof Error ? err.message : "Failed to load EMI reminders", "alert"));
-    apiFetch("/invoices?limit=200", authToken)
+    apiFetch("/invoices?limit=5000", authToken)
       .then((data) => setInvoices((data.items || []).map(mapInvoiceFromApi)))
       .catch((err) => notify("Could not load invoices", err instanceof Error ? err.message : "Failed to load invoices", "alert"));
-    apiFetch("/payments?limit=200", authToken)
+    apiFetch("/payments?limit=5000", authToken)
       .then((data) => setPayments((data.items || []).map(mapPaymentFromApi)))
       .catch((err) => notify("Could not load payments", err instanceof Error ? err.message : "Failed to load payments", "alert"));
-    apiFetch("/maintenance?limit=200", authToken)
+    apiFetch("/maintenance?limit=5000", authToken)
       .then((data) => setMaintenancePlan((data.items || []).map(mapMaintenanceFromApi)))
       .catch((err) => notify("Could not load maintenance", err instanceof Error ? err.message : "Failed to load maintenance", "alert"));
-    apiFetch("/documents?limit=500", authToken)
+    apiFetch("/documents?limit=5000", authToken)
       .then((data) => setDocuments((data.items || []).map(mapDocumentFromApi)))
       .catch((err) => notify("Could not load documents", err instanceof Error ? err.message : "Failed to load documents", "alert"));
-    apiFetch("/balanceFreights?limit=200", authToken)
+    apiFetch("/balanceFreights?limit=5000", authToken)
       .then((data) => setBalanceFreights((data.items || []).map(mapBalanceFreightFromApi)))
       .catch((err) => notify("Could not load vehicle register", err instanceof Error ? err.message : "Failed to load vehicle register", "alert"));
-    apiFetch("/attendance?limit=500", authToken)
+    apiFetch("/attendance?limit=5000", authToken)
       .then((data) => setAttendance((data.items || []).map(mapAttendanceFromApi)))
       .catch((err) => notify("Could not load attendance", err instanceof Error ? err.message : "Failed to load attendance", "alert"));
-    apiFetch("/payroll?limit=200", authToken)
+    apiFetch("/payroll?limit=5000", authToken)
       .then((data) => setPayroll((data.items || []).map(mapPayrollFromApi)))
       .catch((err) => notify("Could not load payroll", err instanceof Error ? err.message : "Failed to load payroll", "alert"));
     apiFetch("/company-profile", authToken)
@@ -3565,7 +3565,6 @@ function CustomerForm({ form, setForm, onSave }: { form: Record<string, string>;
 function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record<string, string>; setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>; customers: Customer[]; vehicles: Vehicle[]; onSave: (files: UploadedFile[]) => void }) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [showCharges, setShowCharges] = useState(false);
-  const [showTripExpenses, setShowTripExpenses] = useState(false);
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const availableVehicles = vehicles.filter((v) => v.status === "Available" || v.id === form.vehicleId);
   const freight = Number(form.freight || 0);
@@ -3602,10 +3601,6 @@ function TripForm({ form, setForm, customers, vehicles, onSave }: { form: Record
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Bill number is assigned automatically in sequence when you save this booking.</div>
     <Field label="Ch. No." value={form.chNo || ""} onChange={(v) => set("chNo", v)} />
     <Field label="Remarks" value={form.remarks || ""} onChange={(v) => set("remarks", v)} />
-    <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]">Trip Expense & Remarks
-      <div className="mt-1.5 flex gap-2"><button type="button" onClick={() => setShowTripExpenses((value) => !value)} className="px-4 py-3 rounded-2xl text-xs font-semibold" style={glassSubtle}>{showTripExpenses ? "Close breakdown" : "Add trip breakdown"}</button>{parseTripExpenseRemarks(form.tripExpenseRemarksJson).length > 0 && <span className="self-center text-xs text-[#6B7280]">{parseTripExpenseRemarks(form.tripExpenseRemarksJson).length} saved item(s)</span>}</div>
-    </label>
-    {showTripExpenses && <TripExpenseRemarkBreakdown initialRows={parseTripExpenseRemarks(form.tripExpenseRemarksJson)} onApply={(rows) => set("tripExpenseRemarksJson", JSON.stringify(rows))} onClose={() => setShowTripExpenses(false)} />}
 
     <FormSection title="Charges & Billing" />
     <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]">Other Charges
@@ -3673,6 +3668,7 @@ function PaymentForm({ form, setForm, invoices, onSave }: { form: Record<string,
 function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<string, string>; setForm: React.Dispatch<React.SetStateAction<Record<string, string>>>; vehicles: Vehicle[]; onSave: () => void }) {
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const [showCharges, setShowCharges] = useState(false);
+  const [showTripExpenses, setShowTripExpenses] = useState(false);
   const freight = Number(form.freight || 0);
   const commissionPercent = Number(form.commissionPercent || 0);
   const commission = Math.round((freight * commissionPercent) / 100);
@@ -3736,6 +3732,10 @@ function BalanceFreightForm({ form, setForm, vehicles, onSave }: { form: Record<
     <div className="rounded-2xl p-4 mb-4 text-sm font-bold" style={glassSubtle}>Balance: {rupees(netBalance)}</div>
     <div className="rounded-2xl p-3 mb-4 text-xs font-semibold" style={glassSubtle}>Bill number is assigned automatically in sequence when you save this record.</div>
     <Field label="Remarks" value={form.remarks || ""} onChange={(v) => set("remarks", v)} />
+    <label className="block mb-4 text-sm font-semibold text-[#1a1d2e]">Trip Expense & Remarks
+      <div className="mt-1.5 flex gap-2"><button type="button" onClick={() => setShowTripExpenses((value) => !value)} className="px-4 py-3 rounded-2xl text-xs font-semibold" style={glassSubtle}>{showTripExpenses ? "Close breakdown" : "Add trip breakdown"}</button>{parseTripExpenseRemarks(form.tripExpenseRemarksJson).length > 0 && <span className="self-center text-xs text-[#6B7280]">{parseTripExpenseRemarks(form.tripExpenseRemarksJson).length} saved item(s)</span>}</div>
+    </label>
+    {showTripExpenses && <TripExpenseRemarkBreakdown initialRows={parseTripExpenseRemarks(form.tripExpenseRemarksJson)} onApply={(rows) => set("tripExpenseRemarksJson", JSON.stringify(rows))} onClose={() => setShowTripExpenses(false)} />}
 
     <FormSection title="Balance Payment" />
     <Field label="Balance Payment Date" type="date" value={form.balancePaymentDate || ""} onChange={(v) => set("balancePaymentDate", v)} />
