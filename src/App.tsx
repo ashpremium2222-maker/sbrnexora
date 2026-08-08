@@ -1684,49 +1684,49 @@ export default function App() {
 
   useEffect(() => {
     if (!authToken) return;
-    apiFetch("/vehicles?limit=5000", authToken)
+    apiFetch("/vehicles?limit=10000", authToken)
       .then((data) => {
         setVehicles((data.items || []).map(mapVehicleFromApi));
         setVehiclesLoaded(true);
       })
       .catch((err) => setVehiclesError(err instanceof Error ? err.message : "Failed to load vehicles"));
-    apiFetch("/drivers?limit=5000", authToken)
+    apiFetch("/drivers?limit=10000", authToken)
       .then((data) => setDrivers((data.items || []).map(mapDriverFromApi)))
       .catch((err) => notify("Could not load drivers", err instanceof Error ? err.message : "Failed to load drivers", "alert"));
-    apiFetch("/customers?limit=5000", authToken)
+    apiFetch("/customers?limit=10000", authToken)
       .then((data) => setCustomers((data.items || []).map(mapCustomerFromApi)))
       .catch((err) => notify("Could not load customers", err instanceof Error ? err.message : "Failed to load customers", "alert"));
-    apiFetch("/trips?limit=5000", authToken)
+    apiFetch("/trips?limit=10000", authToken)
       .then((data) => setTrips((data.items || []).map(mapTripFromApi)))
       .catch((err) => notify("Could not load bookings", err instanceof Error ? err.message : "Failed to load bookings", "alert"));
-    apiFetch("/expenses?limit=5000", authToken)
+    apiFetch("/expenses?limit=10000", authToken)
       .then((data) => setExpenses((data.items || []).map(mapExpenseFromApi)))
       .catch((err) => notify("Could not load expenses", err instanceof Error ? err.message : "Failed to load expenses", "alert"));
-    apiFetch("/companyExpenses?limit=5000", authToken)
+    apiFetch("/companyExpenses?limit=10000", authToken)
       .then((data) => setCompanyExpenses((data.items || []).map(mapCompanyExpenseFromApi)))
       .catch((err) => notify("Could not load company expenses", err instanceof Error ? err.message : "Failed to load company expenses", "alert"));
-    apiFetch("/emiReminders?limit=5000", authToken)
+    apiFetch("/emiReminders?limit=10000", authToken)
       .then((data) => setEmiReminders((data.items || []).map(mapEmiReminderFromApi)))
       .catch((err) => notify("Could not load EMI reminders", err instanceof Error ? err.message : "Failed to load EMI reminders", "alert"));
-    apiFetch("/invoices?limit=5000", authToken)
+    apiFetch("/invoices?limit=10000", authToken)
       .then((data) => setInvoices((data.items || []).map(mapInvoiceFromApi)))
       .catch((err) => notify("Could not load invoices", err instanceof Error ? err.message : "Failed to load invoices", "alert"));
-    apiFetch("/payments?limit=5000", authToken)
+    apiFetch("/payments?limit=10000", authToken)
       .then((data) => setPayments((data.items || []).map(mapPaymentFromApi)))
       .catch((err) => notify("Could not load payments", err instanceof Error ? err.message : "Failed to load payments", "alert"));
-    apiFetch("/maintenance?limit=5000", authToken)
+    apiFetch("/maintenance?limit=10000", authToken)
       .then((data) => setMaintenancePlan((data.items || []).map(mapMaintenanceFromApi)))
       .catch((err) => notify("Could not load maintenance", err instanceof Error ? err.message : "Failed to load maintenance", "alert"));
-    apiFetch("/documents?limit=5000", authToken)
+    apiFetch("/documents?limit=10000", authToken)
       .then((data) => setDocuments((data.items || []).map(mapDocumentFromApi)))
       .catch((err) => notify("Could not load documents", err instanceof Error ? err.message : "Failed to load documents", "alert"));
-    apiFetch("/balanceFreights?limit=5000", authToken)
+    apiFetch("/balanceFreights?limit=10000", authToken)
       .then((data) => setBalanceFreights((data.items || []).map(mapBalanceFreightFromApi)))
       .catch((err) => notify("Could not load vehicle register", err instanceof Error ? err.message : "Failed to load vehicle register", "alert"));
-    apiFetch("/attendance?limit=5000", authToken)
+    apiFetch("/attendance?limit=10000", authToken)
       .then((data) => setAttendance((data.items || []).map(mapAttendanceFromApi)))
       .catch((err) => notify("Could not load attendance", err instanceof Error ? err.message : "Failed to load attendance", "alert"));
-    apiFetch("/payroll?limit=5000", authToken)
+    apiFetch("/payroll?limit=10000", authToken)
       .then((data) => setPayroll((data.items || []).map(mapPayrollFromApi)))
       .catch((err) => notify("Could not load payroll", err instanceof Error ? err.message : "Failed to load payroll", "alert"));
     apiFetch("/company-profile", authToken)
@@ -2906,7 +2906,7 @@ function TripsWithView({ trips, customers, vehicles, drivers, role, search, setS
 }
 
 function Trips({ trips, customers, vehicles, drivers, role, search, setSearch, openModal, updateTripStatus, setView, exportCsv, onBill, edit, remove, onPodUpload }: { trips: Trip[]; customers: Customer[]; vehicles: Vehicle[]; drivers: Driver[]; role: Role; search: string; setSearch: (v: string) => void; openModal: (m: string) => void; updateTripStatus: (id: string, status: TripStatus) => void; setView: (v: View) => void; exportCsv: (n: string, rows: Record<string, string | number>[]) => void; onBill: (id: string) => void; edit: (trip: Trip) => void; remove: (id: string) => void; onPodUpload: (tripId: string, files: UploadedFile[]) => void }) {
-  const filtered = trips.filter((t) => `${t.id} ${t.lrNumber ?? ""} ${t.manualVehicleNumber ?? ""} ${t.pickup} ${t.drop} ${t.cargo} ${t.cargoName ?? ""}`.toLowerCase().includes(search.toLowerCase()));
+  const filtered = trips.filter((t) => `${t.lrNumber ?? ""} ${t.invoiceNumber ?? ""} ${t.manualVehicleNumber ?? ""} ${t.pickup} ${t.drop} ${t.cargo} ${t.cargoName ?? ""}`.toLowerCase().includes(search.toLowerCase()));
   const statusOptions: TripStatus[] = ["Draft", "Assigned", "In Transit", "Completed", "Cancelled"];
   return <div><Toolbar title={role === "driver" ? "My Bookings" : "Booking Register"} subtitle="LR, cargo, live tracking, POD upload, trip billing and status control" search={search} setSearch={setSearch} action={<>{role === "admin" && <button onClick={() => exportCsv("booking-register", trips.map((t) => ({ id: t.id, date: t.date, lrNumber: t.lrNumber ?? "", vehicleNo: vehicles.find((v) => v.id === t.vehicleId)?.number ?? "", driver: drivers.find((d) => d.id === t.driverId)?.name ?? "", partyName: customers.find((c) => c.id === t.customerId)?.company ?? "", from: t.pickup, to: t.drop, freight: t.freight, advance: t.advanceAmount ?? 0, balance: Math.max(t.freight - (t.advanceAmount ?? 0), 0), otherCharges: t.otherExpenses ?? 0, otherChargesReason: t.otherChargesReason ?? "", invoiceNumber: t.invoiceNumber ?? "", paymentStatus: t.paymentStatus ?? "", status: t.status, remarks: t.remarks ?? "" })))} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><Download size={15} />Export Excel</button>}<button onClick={() => setView("tripReport")} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold" style={glassSubtle}><FileText size={15} />Report</button>{role === "admin" && <button onClick={() => openModal("trip")} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold text-white bg-[#12151C]"><Plus size={15} />New Booking</button>}</>} />
     <DataCard>{filtered.map((t) => { const tripBreakdownTotal = (t.expenseRemarks ?? []).reduce((sum, item) => sum + item.amount, 0); const totalExpenses = (t.tollCharges ?? 0) + (t.driverAllowance ?? 0) + (t.otherExpenses ?? 0) + tripBreakdownTotal; const profit = t.freight - totalExpenses; return <Row key={t.id}><div className="w-10 h-10 rounded-xl bg-[#12151C] text-white flex items-center justify-center"><Route size={17} /></div><div className="flex-1 min-w-[260px]"><p className="text-sm font-semibold">{t.pickup} <ChevronRight size={12} className="inline" /> {t.drop}</p><p className="text-xs text-[#9CA3AF]">{t.lrNumber || "LR not assigned"} - {customers.find((c) => c.id === t.customerId)?.company} - {t.cargoName || t.cargo}</p><p className="text-xs text-[#9CA3AF]">Cargo: {t.materialType || "-"} - {t.weight || "-"} - Qty {t.quantity || "-"} - {t.date}{t.endDate ? ` to ${t.endDate}` : ""}</p>{t.remarks && <p className="text-xs text-[#9CA3AF] italic mt-0.5">Remarks: {t.remarks}</p>}</div><p className="hidden lg:block text-xs">{vehicles.find((v) => v.id === t.vehicleId)?.number}</p><p className="hidden lg:block text-xs">{drivers.find((d) => d.id === t.driverId)?.name}</p><div className="text-xs min-w-[170px]"><p className="font-bold">{rupees(t.freight)}</p><p className="text-[#9CA3AF]">Advance {rupees(t.advanceAmount ?? 0)}</p><p className={profit < 0 ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>P/L {rupees(profit)}</p></div><div className="text-xs min-w-[180px]"><p>Expenses {rupees(totalExpenses)}</p>{t.expenseRemarks?.map((item, index) => <p key={`${item.category}-${index}`} className="text-[#52708D] mt-0.5">{item.category} {rupees(item.amount)}{item.remark ? ` · ${item.remark}` : ""}</p>)}<p>Invoice {t.invoiceNumber || "-"}</p><Badge label={t.paymentStatus || "Pending"} /></div><select value={t.status} onChange={(e) => updateTripStatus(t.id, e.target.value as TripStatus)} className="rounded-xl px-3 py-2 text-xs font-semibold outline-none" style={glassSubtle}>{statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}</select>{role === "admin" && <button onClick={() => onBill(t.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}><Receipt size={13} />Bill</button>}{role === "admin" && <button onClick={() => edit(t)} className="px-3 py-2 rounded-xl text-xs font-semibold" style={glassSubtle}>Edit</button>}{role === "admin" && <button onClick={() => remove(t.id)} className="px-3 py-2 rounded-xl text-xs font-semibold text-white bg-red-600">Delete</button>}<FileField label="POD" category="pod" onFiles={(files) => onPodUpload(t.id, files)} /></Row>; })}</DataCard>
